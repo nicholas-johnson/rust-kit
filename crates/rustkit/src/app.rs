@@ -385,14 +385,17 @@ fn json_error(e: &Error) -> Response<Body> {
 }
 
 /// The HTML document around a page body. Called by generated code.
-pub fn document(title: &str, css: Option<&str>, body: &str, payload: Option<&str>, js: Option<&str>) -> String {
+///
+/// `css` lists stylesheet URLs in cascade order: app-wide sheets (such as
+/// Tailwind) first, then the page's own `<style>` block.
+pub fn document(title: &str, css: &[&str], body: &str, payload: Option<&str>, js: Option<&str>) -> String {
     let mut out = String::with_capacity(body.len() + 512);
     out.push_str("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n");
     out.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>");
     crate::js::escape_into(&mut out, title);
     out.push_str("</title>\n");
     out.push_str(&crate::dev::script_tag());
-    if let Some(css) = css {
+    for css in css {
         out.push_str(&format!("<link rel=\"stylesheet\" href=\"{css}\">\n"));
     }
     if let Some(js) = js {
