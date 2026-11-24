@@ -1,0 +1,13 @@
+<title>Hoisted title</title>
+
+<p><a href="/">← All pages</a></p>
+
+<h1>Title hoisting</h1>
+<p>The top-level title element becomes the document title.</p>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

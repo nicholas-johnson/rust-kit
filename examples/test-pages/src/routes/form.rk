@@ -1,0 +1,29 @@
+<script>
+  import { message } from "$sources";
+  let second = $state(false);
+</script>
+
+<title>Forms</title>
+
+<p><a href="/">← All pages</a></p>
+
+<h1>Forms</h1>
+<DataSource source={message} load="server" let:data>
+  {#if data.hasText}<p id="last">Last message: {data.text}</p>{:else}<p id="last">No message yet.</p>{/if}
+</DataSource>
+<form id="server-form" method="post" action="/form/echo">
+  <input name="message" placeholder="Rendered by Rust"><button>Send</button>
+</form>
+<button id="show-second" onclick={() => second = !second}>Show a form rendered by the browser</button>
+{#if second}
+<form id="browser-form" method="post" action="/form/echo">
+  <input name="message" value="from the browser"><button>Send</button>
+</form>
+{/if}
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

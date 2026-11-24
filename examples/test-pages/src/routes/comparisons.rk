@@ -1,0 +1,43 @@
+<script>
+  import { samples } from "$sources";
+  let live = $state(true);
+</script>
+
+<title>Comparisons</title>
+
+<p><a href="/">← All pages</a></p>
+
+<h1>Comparisons</h1>
+<button id="toggle" onclick={() => live = !live}>Toggle the live region</button>
+
+<DataSource source={samples} load="server" let:data>
+  {#if live}
+  <ul id="out">
+    <li id="c0">"Z" &lt; "a": {data.upper < data.lower}</li>
+    <li id="c1">"é" &gt; "z": {data.accented > "z"}</li>
+    <li id="c2">🦀 &gt; "z": {data.crab > "z"}</li>
+    <li id="c3">🦀 &lt; U+FF61 (UTF-16 order): {data.crab < data.halfwidth}</li>
+    <li id="c4">"10" &gt; 9: {data.tenText > 9}</li>
+    <li id="c5">"10" &lt; "9": {data.tenText < data.nineText}</li>
+    <li id="c6">0.1 + 0.2 === 0.3: {data.sum === 0.3}</li>
+    <li id="c7">count &gt;= 123456789: {data.count >= 123456789}</li>
+    <li id="c8">None === null: {data.nothing === null}</li>
+    <li id="c9">None number === null: {data.noNumber === null}</li>
+    <li id="c10">"" === "": {data.empty === ""}</li>
+    <li id="c11">0 === "0": {data.zero === data.zeroText}</li>
+    <li id="c12">-0 === 0: {data.negZero === 0}</li>
+    <li id="c13">0.5 &lt;= 0.5: {data.half <= 0.5}</li>
+    <li id="c14">true !== false: {data.yes !== false}</li>
+    <li id="c15">-42 &lt; 0: {data.negative < 0}</li>
+    <li id="c16">null &lt; 1: {null < 1}</li>
+    <li id="c17">"abc" === "abc": {"abc" === "abc"}</li>
+  </ul>
+  {/if}
+</DataSource>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

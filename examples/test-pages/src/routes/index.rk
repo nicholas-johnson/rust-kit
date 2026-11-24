@@ -1,0 +1,31 @@
+<script context="module">
+  export const prerender = true;
+</script>
+
+<title>Rust-kit test pages</title>
+
+<h1>Rust-kit test pages</h1>
+<p>Small pages, one feature each. The tests in <code>examples/test-pages/tests</code> check every one of them on the server, and check that the browser renders the same HTML as Rust.</p>
+<ul>
+  <li><a href="/static">static</a>: a prerendered page with no JavaScript</li>
+  <li><a href="/title">title</a>: title hoisting, no JavaScript</li>
+  <li><a href="/text">text</a>: escaping, emoji, number formatting, null</li>
+  <li><a href="/attributes">attributes</a>: static, bound, boolean and mixed attributes</li>
+  <li><a href="/conditionals">conditionals</a>: truthiness, <code>!</code>, <code>&amp;&amp;</code>, <code>||</code>, else-if chains</li>
+  <li><a href="/comparisons">comparisons</a>: strict equality and ordering, including UTF-16 string order</li>
+  <li><a href="/loops">loops</a>: each with index, nested each, empty lists, length</li>
+  <li><a href="/counter">counter</a>: state, handlers, a state-bound attribute</li>
+  <li><a href="/nested">nested</a>: blocks inside blocks, each with its own state</li>
+  <li><a href="/toggle">toggle</a>: server data handed to the browser, one field at a time</li>
+  <li><a href="/branches-0">branches-0</a>, <a href="/branches-2">branches-2</a>, <a href="/branches-5">branches-5</a>: the same chain with different initial state</li>
+  <li><a href="/list-server">list-server</a> and <a href="/list-client">list-client</a>: the same markup loaded on the server and in the browser</li>
+  <li><a href="/form">form</a>: CSRF-protected posts, rendered by Rust and by the browser</li>
+  <li><a href="/nan">nan</a>: a known divergence, NaN and Infinity in the handoff payload</li>
+</ul>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

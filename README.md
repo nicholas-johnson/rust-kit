@@ -14,8 +14,30 @@ correctly before any JavaScript runs.
 crates/rustkit-compiler   .rk parser, expression checker, Rust + JS codegen, browser runtime
 crates/rustkit            request context, sessions, CSRF, router, JS value semantics
 examples/account-demo     the proposal's static article and account page
+examples/test-pages       small single-feature pages, with server and Rust-vs-browser parity tests
 site                      generator for rust-kit.com (docs, tutorials, landing page)
 ```
+
+## Test pages
+
+`examples/test-pages` has 18 tiny pages, each exercising one feature: escaping,
+number formatting, attributes, truthiness, comparisons (including UTF-16 string
+order), loops, state, nested blocks, the handoff payload, client loading and
+forms. Browse them with:
+
+```bash
+cargo run -p test-pages
+```
+
+`tests/pages.rs` checks what the server sends. `tests/parity.rs` checks the
+framework's central promise: it loads each page's real browser module and the
+real runtime in Node, renders every block, and requires the same HTML Rust
+produced, including after state changes and for client-loaded data. It needs
+`node` on `PATH`; it is skipped locally without it and required in CI.
+
+One divergence is known and pinned by an ignored test: `NaN` and `Infinity`
+render in Rust but arrive in the browser as `null`, because the handoff payload
+is JSON.
 
 ## The website
 

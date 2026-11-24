@@ -17,6 +17,12 @@
       "port": 3917
     },
     {
+      "name": "test-pages",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": ["run", "--offline", "-q", "-p", "test-pages", "--", "127.0.0.1:3918"],
+      "port": 3918
+    },
+    {
       "name": "site",
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "4180", "--bind", "127.0.0.1", "--directory", "site/dist"],

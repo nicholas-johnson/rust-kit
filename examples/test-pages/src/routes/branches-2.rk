@@ -1,0 +1,20 @@
+<script>
+  let n = $state(2);
+</script>
+
+<title>Branches from 2</title>
+
+<p><a href="/">← All pages</a></p>
+
+<h1>Branches</h1>
+<button id="bump" onclick={() => n = n + 1}>n = {n}</button>
+<section id="out">
+  {#if n === 0}<p>zero</p>{:else if n < 3}<p>small: {n}</p>{:else}<p>big: {n}</p>{/if}
+</section>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

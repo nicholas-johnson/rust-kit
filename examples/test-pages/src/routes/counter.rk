@@ -1,0 +1,23 @@
+<script>
+  let count = $state(0);
+</script>
+
+<title>Counter</title>
+
+<p><a href="/">← All pages</a></p>
+
+<h1>Counter</h1>
+<p>
+  <button id="dec" disabled={count <= 0} onclick={() => count = count - 1}>−</button>
+  <output id="value">{count}</output>
+  <button id="inc" onclick={() => count = count + 1}>+</button>
+  <button id="reset" onclick={() => count = 0}>Reset</button>
+</p>
+{#if count >= 3}<p id="msg">That is {count} clicks.</p>{/if}
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

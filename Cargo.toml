@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/rustkit", "crates/rustkit-compiler", "examples/account-demo", "site"]
+members = ["crates/rustkit", "crates/rustkit-compiler", "examples/account-demo", "examples/test-pages", "site"]
 
 [workspace.package]
 edition = "2024"

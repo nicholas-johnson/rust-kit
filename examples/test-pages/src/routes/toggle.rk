@@ -1,0 +1,22 @@
+<script>
+  import { samples } from "$sources";
+  let open = $state(false);
+</script>
+
+<title>Toggle</title>
+
+<p><a href="/">← All pages</a></p>
+
+<DataSource source={samples} load="server" let:data>
+  <h1>Toggle: {data.emoji}</h1>
+  <p>The heading is rendered by Rust only. The details below are rendered by the browser when opened, from fields Rust put in the page.</p>
+  <button id="open" onclick={() => open = !open}>Details</button>
+  {#if open}<p id="details">{data.quotes} / {data.count}</p>{/if}
+</DataSource>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

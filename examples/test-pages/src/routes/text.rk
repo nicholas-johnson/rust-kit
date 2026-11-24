@@ -1,0 +1,42 @@
+<script>
+  import { samples } from "$sources";
+  let live = $state(true);
+</script>
+
+<title>Text and escaping</title>
+
+<p><a href="/">← All pages</a></p>
+
+<h1>Text and escaping</h1>
+<button id="toggle" onclick={() => live = !live}>Toggle the live region</button>
+
+<DataSource source={samples} load="server" let:data>
+  {#if live}
+  <dl id="out">
+    <dt>markup</dt><dd id="markup">{data.markup}</dd>
+    <dt>quotes</dt><dd id="quotes">{data.quotes}</dd>
+    <dt>emoji</dt><dd id="emoji">{data.emoji}</dd>
+    <dt>emoji length (UTF-16)</dt><dd id="emoji-length">{data.emoji.length}</dd>
+    <dt>empty</dt><dd id="empty">[{data.empty}]</dd>
+    <dt>0.1 + 0.2</dt><dd id="sum">{data.sum}</dd>
+    <dt>1e21</dt><dd id="big">{data.big}</dd>
+    <dt>1.5e-7</dt><dd id="tiny">{data.tiny}</dd>
+    <dt>0.000001</dt><dd id="small">{data.small}</dd>
+    <dt>-0</dt><dd id="neg-zero">{data.negZero}</dd>
+    <dt>0.5</dt><dd id="half">{data.half}</dd>
+    <dt>integer</dt><dd id="count">{data.count}</dd>
+    <dt>negative</dt><dd id="negative">{data.negative}</dd>
+    <dt>booleans</dt><dd id="bools">{data.yes} {data.no}</dd>
+    <dt>None</dt><dd id="nothing">[{data.nothing}]</dd>
+    <dt>Some</dt><dd id="something">{data.something}</dd>
+    <dt>literals</dt><dd id="literals">{"x < y & z"} {42} {1.25} {true} [{null}]</dd>
+  </dl>
+  {/if}
+</DataSource>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

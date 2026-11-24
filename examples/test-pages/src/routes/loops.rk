@@ -1,0 +1,35 @@
+<script>
+  import { items } from "$sources";
+  let live = $state(true);
+</script>
+
+<title>Loops</title>
+
+<p><a href="/">← All pages</a></p>
+
+<h1>Loops</h1>
+<button id="toggle" onclick={() => live = !live}>Toggle the live region</button>
+
+<DataSource source={items} load="server" let:data>
+  {#if live}
+  <div id="out">
+    <p id="total">{data.items.length} items</p>
+    <ol id="items">
+      {#each data.items as item, i}
+      <li>{i}: {item.name}, {item.price} ({item.tags.length} tags){#if item.note}, note: {item.note}{/if}
+        <ul>{#each item.tags as tag, j}<li>{j}={tag}</li>{/each}</ul>
+      </li>
+      {/each}
+    </ol>
+    {#each data.none as item}<p>never shown: {item.name}</p>{/each}
+    {#if data.none.length === 0}<p id="empty">The second list is empty.</p>{/if}
+  </div>
+  {/if}
+</DataSource>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

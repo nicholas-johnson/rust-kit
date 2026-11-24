@@ -1,0 +1,27 @@
+<script>
+  import { items } from "$sources";
+</script>
+
+<title>List (server)</title>
+
+<p><a href="/">← All pages</a></p>
+<h1>List, loaded on the server</h1>
+<DataSource source={items} load="server" let:data>
+  <section id="list">
+    {#each data.items as item, i}
+    <article>
+      <h2>{i}. {item.name}</h2>
+      <p>{item.price}</p>
+      {#if item.note}<p>{item.note}</p>{:else}<p>no note</p>{/if}
+      <ul>{#each item.tags as tag}<li>{tag}</li>{/each}</ul>
+    </article>
+    {/each}
+  </section>
+</DataSource>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

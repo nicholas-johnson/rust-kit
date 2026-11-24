@@ -1,0 +1,35 @@
+<script>
+  import { samples } from "$sources";
+  let live = $state(true);
+</script>
+
+<title>Attributes</title>
+
+<p><a href="/">← All pages</a></p>
+
+<h1>Attributes</h1>
+<button id="toggle" onclick={() => live = !live}>Toggle the live region</button>
+
+<DataSource source={samples} load="server" let:data>
+  {#if live}
+  <div id="out">
+    <input id="a-quoted" value={data.quotes}>
+    <input id="a-true" disabled={data.yes}>
+    <input id="a-false" disabled={data.no}>
+    <input id="a-null" disabled={data.nothing}>
+    <input id="a-some" title={data.something}>
+    <p id="a-mixed" class="tag {data.lower} tag-{data.count}">mixed</p>
+    <p id="a-empty" data-value={data.empty}>empty string</p>
+    <p id="a-number" data-value={data.sum}>number</p>
+    <input id="a-bare" type="checkbox" checked>
+    <p id="a-static" title='single "quoted"'>static</p>
+  </div>
+  {/if}
+</DataSource>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

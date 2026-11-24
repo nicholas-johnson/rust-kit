@@ -1,0 +1,30 @@
+<script>
+  let outer = $state(true);
+  let inner = $state(false);
+  let n = $state(1);
+  let label = $state("<b>not bold</b>");
+</script>
+
+<title>Nested blocks</title>
+
+<p><a href="/">← All pages</a></p>
+
+<h1>Nested blocks</h1>
+<p>
+  <button id="toggle-outer" onclick={() => outer = !outer}>Toggle outer</button>
+  <button id="toggle-inner" onclick={() => inner = !inner}>Toggle inner</button>
+  <button id="bump" onclick={() => n = n + 1}>n + 1</button>
+</p>
+{#if outer}
+<div id="outer">
+  <p>Outer block, n = {n}</p>
+  {#if inner}<p id="inner">Inner block, n = {n}, label = {label}</p>{:else}<p id="inner-off">Inner block is off</p>{/if}
+</div>
+{/if}
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

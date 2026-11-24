@@ -1,0 +1,43 @@
+<script>
+  import { samples } from "$sources";
+  let live = $state(true);
+</script>
+
+<title>Conditionals</title>
+
+<p><a href="/">← All pages</a></p>
+
+<h1>Conditionals and truthiness</h1>
+<button id="toggle" onclick={() => live = !live}>Toggle the live region</button>
+
+<DataSource source={samples} load="server" let:data>
+  {#if live}
+  <ul id="out">
+    <li id="t0">empty string: {#if data.empty}T{:else}F{/if}</li>
+    <li id="t1">"0": {#if data.zeroText}T{:else}F{/if}</li>
+    <li id="t2">0: {#if data.zero}T{:else}F{/if}</li>
+    <li id="t3">-0: {#if data.negZero}T{:else}F{/if}</li>
+    <li id="t4">123456789: {#if data.count}T{:else}F{/if}</li>
+    <li id="t5">1.5e-7: {#if data.tiny}T{:else}F{/if}</li>
+    <li id="t6">true: {#if data.yes}T{:else}F{/if}</li>
+    <li id="t7">false: {#if data.no}T{:else}F{/if}</li>
+    <li id="t8">None: {#if data.nothing}T{:else}F{/if}</li>
+    <li id="t9">Some: {#if data.something}T{:else}F{/if}</li>
+    <li id="t10">None number: {#if data.noNumber}T{:else}F{/if}</li>
+    <li id="t11">!empty: {#if !data.empty}T{:else}F{/if}</li>
+    <li id="t12">!!count: {#if !!data.count}T{:else}F{/if}</li>
+    <li id="t13">yes &amp;&amp; something: {#if data.yes && data.something}T{:else}F{/if}</li>
+    <li id="t14">yes &amp;&amp; nothing: {#if data.yes && data.nothing}T{:else}F{/if}</li>
+    <li id="t15">no || zero: {#if data.no || data.zero}T{:else}F{/if}</li>
+    <li id="t16">no || tiny: {#if data.no || data.tiny}T{:else}F{/if}</li>
+    <li id="chain">chain: {#if data.count > 1000000000}huge{:else if data.count > 1000}medium{:else}small{/if}</li>
+  </ul>
+  {/if}
+</DataSource>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

@@ -1,0 +1,23 @@
+<script>
+  import { samples } from "$sources";
+  let live = $state(true);
+</script>
+
+<title>NaN and Infinity</title>
+
+<p><a href="/">← All pages</a></p>
+<h1>NaN and Infinity</h1>
+<p>A known divergence. Rust renders these values directly, but the handoff payload is JSON, which has no NaN or Infinity, so they reach the browser as <code>null</code>. Toggle the region twice to see the browser's version.</p>
+<button id="toggle" onclick={() => live = !live}>Toggle the live region</button>
+<DataSource source={samples} load="server" let:data>
+  {#if live}
+  <dl id="out">
+    <dt>NaN</dt><dd id="nan">{data.notANumber}</dd>
+    <dt>Infinity</dt><dd id="inf">{data.infinite}</dd>
+  </dl>
+  {/if}
+</DataSource>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+</style>

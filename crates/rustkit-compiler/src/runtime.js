@@ -10,6 +10,9 @@ const esc = (v) => (v == null ? "" : String(v)).replace(/[&<>"']/g, (c) => ESC[c
 const attr = (name, v) => (v === false || v == null ? "" : v === true ? " " + name : ` ${name}="${esc(v)}"`);
 const LOADING = '<p class="rk-loading" aria-busy="true">Loading…</p>';
 
+// Exported for the parity tests, which render blocks outside a browser.
+export { esc, attr, LOADING };
+
 let notify = () => {};
 
 /** Reactive page state. Assigning a property schedules an update. */

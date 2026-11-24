@@ -1,0 +1,17 @@
+<script context="module">
+  export const prerender = true;
+</script>
+
+<title>Static page</title>
+
+<p><a href="/">← All pages</a></p>
+
+<h1>Static page</h1>
+<p>Prerendered at build time. No state, no handlers, so no JavaScript at all.</p>
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>
