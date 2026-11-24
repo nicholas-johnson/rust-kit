@@ -52,6 +52,32 @@ exactly as written. For that page the compiler emits:
   the shared runtime (2.7 KB gzipped), and a stylesheet. A page with no state
   and no handlers gets no module and no `<script>` tag.
 
+### Tailwind CSS
+
+Tailwind is off by default. To turn it on, change the crate's `build.rs` to:
+
+```rust
+fn main() {
+    rustkit_compiler::Build::new().tailwind().run();
+}
+```
+
+Then use utility classes in any `.rk` template. The build runs the Tailwind v4
+CLI once and writes one minified, content-hashed stylesheet. Every page links
+that stylesheet before its own `<style>` block, so page styles still win.
+`build` reports the stylesheet in each route's CSS bytes.
+
+- **CLI**: the build uses the first of these that it finds:
+  `$RUSTKIT_TAILWIND`, the crate's `node_modules/.bin/tailwindcss` (from
+  `npm install -D @tailwindcss/cli`), or the
+  [standalone `tailwindcss`](https://tailwindcss.com/blog/standalone-cli) on
+  `PATH`. If none is found, the build fails and says how to install one.
+- **Input**: with no `src/tailwind.css`, the build uses
+  `@import "tailwindcss" source(none); @source "./src/routes";`. Add
+  `src/tailwind.css` to use `@theme`, plugins, or more `@source` paths.
+- Class names must appear whole in the template, as Tailwind requires. Use
+  `"bg-red-500"`, not `"bg-" + color`.
+
 ### The language boundary
 
 Expressions in templates are limited to field reads, `.length`, literals,
