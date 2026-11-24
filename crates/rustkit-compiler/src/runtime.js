@@ -201,4 +201,6 @@ export function start($s, page) {
     const src = page.blocks[inst.key].source;
     if (src) load(src, false);
   }
+  // Under `rustkit dev`, restores state saved before a reload.
+  globalThis.__rkDev?.adopt($s);
 }

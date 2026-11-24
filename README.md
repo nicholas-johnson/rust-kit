@@ -26,6 +26,33 @@ cargo run -p account-demo -- serve 127.0.0.1:3000
 cargo run -p account-demo -- build dist
 ```
 
+For development, run it under `rustkit dev` instead:
+
+```bash
+cargo run -p rustkit-cli -- dev -p account-demo --addr 127.0.0.1:3000
+```
+
+Then save a `.rk` page or any Rust file in the workspace. `rustkit dev`
+rebuilds the app, restarts it, and reloads open pages.
+
+- **No dropped requests.** The dev process owns the listening socket and hands
+  it to each new copy of the app, so requests made during a restart wait
+  instead of failing. Apps adopt the socket with `rustkit::dev::listener(addr)`.
+- **You stay signed in.** Sessions are saved under `target/rustkit-dev/`, so a
+  restart doesn't sign you out.
+- **Pages keep their place.** Before reloading, a page saves its scroll
+  position and its `$state`, and restores both afterwards. An open editor
+  stays open.
+- **Errors show in the browser.** If a build fails, the last good build keeps
+  running and open pages show the compiler's diagnostic over the content. If
+  nothing is running yet, the dev process serves a page with the error
+  itself. Either way, the page reloads once the build succeeds.
+- Saving a file that doesn't change the binary doesn't restart anything.
+
+Dev mode adds `/_rk/dev.js` and `/_rk/dev/events`, and it serves prerendered
+pages with `no-cache`. It is on only when `rustkit dev` starts the app
+(`RUSTKIT_DEV=1`); `serve` and `build` are unchanged.
+
 `serve` imitates a 25 ms round trip to the accounts service. Sign in at
 `/login` as Alice or Bob (demo accounts with no password). `build` writes the
 prerendered routes and assets to `dist/` and prints JavaScript and CSS bytes per route.

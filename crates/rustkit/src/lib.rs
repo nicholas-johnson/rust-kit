@@ -7,6 +7,7 @@
 
 mod app;
 mod context;
+pub mod dev;
 mod error;
 pub mod js;
 mod session;

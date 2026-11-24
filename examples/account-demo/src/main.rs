@@ -18,11 +18,13 @@ async fn main() {
         }
         Some("serve") | None => {
             let addr = args.get(1).map_or("127.0.0.1:3000", String::as_str);
+            // Under `rustkit dev` this adopts the dev server's socket instead.
+            let listener = rustkit::dev::listener(addr).await.expect("bind");
+            let local = listener.local_addr().expect("local address");
             // Imitate a 25 ms round trip to the accounts service.
-            let app = account_demo::app(Duration::from_millis(25), !addr.starts_with("127.0.0.1"));
+            let app = account_demo::app(Duration::from_millis(25), !local.ip().is_loopback());
             let router = app.into_router().await.expect("prerender failed");
-            let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
-            println!("listening on http://{addr}");
+            println!("listening on http://{local}");
             axum::serve(listener, router).await.unwrap();
         }
         Some(other) => {
