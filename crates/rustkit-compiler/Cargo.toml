@@ -1,0 +1,8 @@
+[package]
+name = "rustkit-compiler"
+description = "Compiles Rust-kit page files into a native Rust renderer and browser JavaScript"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]

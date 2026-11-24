@@ -1,0 +1,46 @@
+<script>
+  import { account, activity } from "$sources";
+  let editing = $state(false);
+  let showActivity = $state(false);
+</script>
+
+<title>Your account</title>
+
+<nav>
+  <a href="/">Home</a> <a href="/article">Article</a> <a href="/account">Account</a>
+  <form method="post" action="/logout"><button>Sign out</button></form>
+</nav>
+
+<DataSource source={account} load="server" let:data>
+  <h1>Hello, {data.displayName}</h1>
+  <button onclick={() => editing = !editing}>Edit profile</button>
+
+  {#if editing}
+    <form method="post" action="/account/profile">
+      <label>Display name <input name="name" value={data.displayName} /></label>
+      <button>Save</button>
+    </form>
+  {/if}
+</DataSource>
+
+<button onclick={() => showActivity = true}>Show recent activity</button>
+{#if showActivity}
+  <DataSource source={activity} load="client" let:data>
+    {#each data.items as item}
+      <p>{item.description}</p>
+    {/each}
+  </DataSource>
+{/if}
+
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
+  body { max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+  nav { display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem; font-size: 0.95rem; }
+  nav form { margin-left: auto; }
+  button { font: inherit; padding: 0.35rem 0.8rem; border-radius: 6px; border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer; }
+  input, select { font: inherit; padding: 0.3rem 0.5rem; }
+  h1 { margin-block-end: 1rem; }
+  form { margin-block: 1rem; display: flex; gap: 0.5rem; align-items: center; }
+  nav form { margin-block: 0; }
+  .rk-loading { opacity: 0.6; }
+</style>

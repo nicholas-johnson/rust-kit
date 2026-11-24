@@ -1,0 +1,23 @@
+<title>Sign in</title>
+
+<nav><a href="/">Home</a> <a href="/article">Article</a> <a href="/account">Account</a></nav>
+<h1>Sign in</h1>
+<p>Demo accounts only. There is no password.</p>
+<form method="post" action="/login">
+  <label>Account
+    <select name="user">
+      <option value="alice">Alice</option>
+      <option value="bob">Bob</option>
+    </select>
+  </label>
+  <button>Sign in</button>
+</form>
+
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
+  body { max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+  nav { display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem; font-size: 0.95rem; }
+  nav form { margin-left: auto; }
+  button { font: inherit; padding: 0.35rem 0.8rem; border-radius: 6px; border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer; }
+  input, select { font: inherit; padding: 0.3rem 0.5rem; }
+</style>

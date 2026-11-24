@@ -1,0 +1,22 @@
+<script context="module">
+  export const prerender = true;
+</script>
+
+<title>Why render on the server?</title>
+
+<nav><a href="/">Home</a> <a href="/article">Article</a> <a href="/account">Account</a></nav>
+<article>
+  <h1>Why render on the server?</h1>
+  <p>A visitor should be able to read a page before any script runs. This article was rendered by the Rust renderer during the build and is served as a static file.</p>
+  <p>It has no event handlers and no state, so the compiler emitted no JavaScript for it at all.</p>
+</article>
+
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
+  body { max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+  nav { display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem; font-size: 0.95rem; }
+  nav form { margin-left: auto; }
+  button { font: inherit; padding: 0.35rem 0.8rem; border-radius: 6px; border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer; }
+  input, select { font: inherit; padding: 0.3rem 0.5rem; }
+  article p { max-width: 34rem; }
+</style>

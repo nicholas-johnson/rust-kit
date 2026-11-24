@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "account-demo",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": [
+        "run",
+        "--offline",
+        "-q",
+        "-p",
+        "account-demo",
+        "--",
+        "serve",
+        "127.0.0.1:3917"
+      ],
+      "port": 3917
+    }
+  ]
+}
