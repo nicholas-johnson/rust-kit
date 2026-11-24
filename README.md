@@ -72,6 +72,9 @@ that stylesheet before its own `<style>` block, so page styles still win.
   `npm install -D @tailwindcss/cli`), or the
   [standalone `tailwindcss`](https://tailwindcss.com/blog/standalone-cli) on
   `PATH`. If none is found, the build fails and says how to install one.
+  An npm-installed CLI outside the crate works for the default input. A
+  `src/tailwind.css` that writes `@import "tailwindcss"` needs the CLI
+  installed in the crate, or the standalone CLI.
 - **Input**: with no `src/tailwind.css`, the build uses
   `@import "tailwindcss" source(none); @source "./src/routes";`. Add
   `src/tailwind.css` to use `@theme`, plugins, or more `@source` paths.
