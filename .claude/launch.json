@@ -27,6 +27,25 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "4180", "--bind", "127.0.0.1", "--directory", "site/dist"],
       "port": 4180
+    },
+    {
+      "name": "account-demo-dev",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": [
+        "run",
+        "--offline",
+        "-q",
+        "-p",
+        "rustkit-cli",
+        "--",
+        "dev",
+        "--offline",
+        "-p",
+        "account-demo",
+        "--addr",
+        "127.0.0.1:3961"
+      ],
+      "port": 3961
     }
   ]
 }

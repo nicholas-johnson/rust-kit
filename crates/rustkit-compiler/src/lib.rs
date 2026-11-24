@@ -3,26 +3,47 @@
 //! Reads `.rk` page files from a routes directory and writes:
 //! - one Rust file with a native `render` function per route and a manifest,
 //! - one browser module per interactive route plus the shared runtime,
-//! - one stylesheet per route that has a `<style>` block.
+//! - one stylesheet per route that has a `<style>` block,
+//! - with Tailwind turned on, one app-wide stylesheet linked from every route.
 //!
-//! Use [`build_script`] from a crate's `build.rs`.
+//! Use [`build_script`] from a crate's `build.rs`, or [`Build`] to turn on
+//! options such as Tailwind:
+//!
+//! ```no_run
+//! fn main() {
+//!     rustkit_compiler::Build::new().tailwind().run();
+//! }
+//! ```
 
 mod expr;
 mod codegen;
 mod parse;
 mod script;
+mod tailwind;
 
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 pub use codegen::Options;
+pub use tailwind::{TAILWIND_ENV, Tailwind};
 
 const RUNTIME_JS: &str = include_str!("runtime.js");
 
-/// The browser runtime every interactive route loads, as shipped.
-pub fn runtime_js() -> &'static str {
-    RUNTIME_JS
+/// The browser runtime. Lines between `// dev:start` and `// dev:end` are
+/// hooks for the `rustkit dev` client; production builds leave them out.
+pub fn runtime_js(dev: bool) -> String {
+    let mut out = String::with_capacity(RUNTIME_JS.len());
+    let mut skipping = false;
+    for line in RUNTIME_JS.split_inclusive('\n') {
+        match line.trim() {
+            "// dev:start" => skipping = !dev,
+            "// dev:end" => skipping = false,
+            _ if !skipping => out.push_str(line),
+            _ => {}
+        }
+    }
+    out
 }
 
 /// A compile error at a byte offset in a page file.
@@ -94,6 +115,12 @@ pub struct Config {
     pub state_type: String,
     /// Module holding the source resolvers, e.g. `crate::sources`.
     pub sources_module: String,
+    /// Include the runtime hooks `rustkit dev` uses to update pages in place.
+    pub dev: bool,
+    /// The crate's root directory. Tailwind runs here.
+    pub crate_dir: PathBuf,
+    /// Generate an app-wide Tailwind stylesheet. Off when `None`.
+    pub tailwind: Option<Tailwind>,
 }
 
 /// Per-route numbers reported by a build.
@@ -146,7 +173,8 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
     let asset_dir = cfg.out_dir.join("rk_assets");
     fs::create_dir_all(&asset_dir).map_err(|e| e.to_string())?;
 
-    let runtime_name = format!("runtime.{}.js", hash(RUNTIME_JS));
+    let runtime = runtime_js(cfg.dev);
+    let runtime_name = format!("runtime.{}.js", hash(&runtime));
     let mut assets: Vec<(String, &str, String)> = Vec::new();
     let mut runtime_used = false;
     let mut modules = String::new();
@@ -154,6 +182,17 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
     let mut client_sources: Vec<String> = Vec::new();
     let mut summaries = Vec::new();
     let mut errors = String::new();
+
+    // App-wide stylesheets, linked from every page before its own `<style>`.
+    let mut global_css: Vec<String> = Vec::new();
+    let mut global_css_bytes = 0;
+    if let Some(tw) = &cfg.tailwind {
+        let css = tw.run(&cfg.crate_dir)?;
+        let name = format!("tailwind.{}.css", hash(&css));
+        global_css_bytes += css.len();
+        global_css.push(format!("/_rk/assets/{name}"));
+        assets.push((name, "text/css; charset=utf-8", css));
+    }
 
     for file in &pages {
         let src = fs::read_to_string(file).map_err(|e| format!("reading {}: {e}", file.display()))?;
@@ -179,21 +218,22 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
             runtime_used = true;
             let js = js.replace("__RUNTIME__", &runtime_name);
             let name = format!("{stem}.{}.js", hash(&js));
-            js_bytes = js.len() + RUNTIME_JS.len();
+            js_bytes = js.len() + runtime.len();
             assets.push((name.clone(), "text/javascript; charset=utf-8", js));
             format!("/_rk/assets/{name}")
         });
-        let css_bytes = page.css.as_ref().map_or(0, String::len);
-        let css_url = page.css.as_ref().map(|css| {
+        let css_bytes = global_css_bytes + page.css.as_ref().map_or(0, String::len);
+        let mut css_urls = global_css.clone();
+        if let Some(css) = &page.css {
             let name = format!("{stem}.{}.css", hash(css));
             assets.push((name.clone(), "text/css; charset=utf-8", css.to_string()));
-            format!("/_rk/assets/{name}")
-        });
+            css_urls.push(format!("/_rk/assets/{name}"));
+        }
 
         let _ = writeln!(
             modules,
-            "/// Compiled from `src/routes/{display}`.\n#[allow(unused, unused_mut, non_snake_case, clippy::all)]\npub mod page_{stem} {{\nconst CSS: Option<&str> = {:?};\nconst JS: Option<&str> = {:?};\n{}}}\n",
-            css_url, js_url, page.rust
+            "/// Compiled from `src/routes/{display}`.\n#[allow(unused, unused_mut, non_snake_case, clippy::all)]\npub mod page_{stem} {{\nconst CSS: &[&str] = &{:?};\nconst JS: Option<&str> = {:?};\n{}}}\n",
+            css_urls, js_url, page.rust
         );
         let _ = writeln!(
             routes,
@@ -211,7 +251,7 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
         return Err(errors);
     }
     if runtime_used {
-        assets.push((runtime_name, "text/javascript; charset=utf-8", RUNTIME_JS.to_owned()));
+        assets.push((runtime_name, "text/javascript; charset=utf-8", runtime));
     }
 
     let st = &cfg.state_type;
@@ -246,18 +286,69 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
 
 /// Entry point for `build.rs`: compiles `src/routes` into `$OUT_DIR`, using
 /// `crate::AppState` and `crate::sources`. Exits with diagnostics on error.
+///
+/// Same as `Build::new().run()`.
 pub fn build_script() {
-    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("run from build.rs"));
-    let cfg = Config {
-        routes_dir: manifest_dir.join("src/routes"),
-        out_dir: PathBuf::from(std::env::var("OUT_DIR").expect("run from build.rs")),
-        state_type: "crate::AppState".into(),
-        sources_module: "crate::sources".into(),
-    };
-    println!("cargo:rerun-if-changed=src/routes");
-    match compile(&cfg) {
-        Ok(_) => {}
-        Err(e) => {
+    Build::new().run();
+}
+
+/// Build options for `build.rs`.
+///
+/// ```no_run
+/// fn main() {
+///     rustkit_compiler::Build::new().tailwind().run();
+/// }
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct Build {
+    tailwind: Option<Tailwind>,
+}
+
+impl Build {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Turns on Tailwind CSS: every page links one minified, app-wide
+    /// stylesheet holding the utilities its templates use.
+    ///
+    /// The input is `src/tailwind.css` if the crate has one, and otherwise
+    /// `@import "tailwindcss"` scanning `src/routes`. The CLI is
+    /// `$RUSTKIT_TAILWIND`, `node_modules/.bin/tailwindcss`, or `tailwindcss`
+    /// on `PATH`, in that order.
+    pub fn tailwind(self) -> Self {
+        self.tailwind_with(Tailwind { minify: true, ..Tailwind::default() })
+    }
+
+    /// Turns on Tailwind CSS with explicit settings.
+    pub fn tailwind_with(mut self, tw: Tailwind) -> Self {
+        self.tailwind = Some(tw);
+        self
+    }
+
+    /// Compiles `src/routes` into `$OUT_DIR`. Exits with diagnostics on error.
+    pub fn run(self) {
+        let crate_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("run from build.rs"));
+        println!("cargo:rerun-if-changed=src/routes");
+        println!("cargo:rerun-if-env-changed=RUSTKIT_DEV");
+        if let Some(tw) = &self.tailwind {
+            println!("cargo:rerun-if-env-changed={TAILWIND_ENV}");
+            println!("cargo:rerun-if-changed=src/tailwind.css");
+            if let Some(p) = &tw.input {
+                println!("cargo:rerun-if-changed={}", p.display());
+            }
+        }
+        let cfg = Config {
+            routes_dir: crate_dir.join("src/routes"),
+            out_dir: PathBuf::from(std::env::var("OUT_DIR").expect("run from build.rs")),
+            state_type: "crate::AppState".into(),
+            sources_module: "crate::sources".into(),
+            crate_dir,
+            tailwind: self.tailwind,
+            // `rustkit dev` sets this for its builds.
+            dev: std::env::var("RUSTKIT_DEV").is_ok_and(|v| v == "1"),
+        };
+        if let Err(e) = compile(&cfg) {
             eprintln!("{e}");
             std::process::exit(1);
         }

@@ -378,10 +378,19 @@ name = "rustkit"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "futures-core",
  "getrandom",
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "rustkit-cli"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde_json",
 ]
 
 [[package]]

@@ -114,7 +114,10 @@ impl<S: Send + Sync + 'static> App<S> {
             manifest,
             state: Arc::new(state),
             actions: Vec::new(),
-            sessions: SessionStore::default(),
+            sessions: match crate::dev::session_file() {
+                Some(path) => SessionStore::persistent(path),
+                None => SessionStore::default(),
+            },
             secure_cookies: true,
             login_path: "/login".into(),
         }
@@ -203,7 +206,8 @@ impl<S: Send + Sync + 'static> App<S> {
                     get(move || async move {
                         Response::builder()
                             .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
-                            .header(header::CACHE_CONTROL, "public, max-age=300")
+                            // In development a reload must show the new build.
+                            .header(header::CACHE_CONTROL, if crate::dev::enabled() { "no-cache" } else { "public, max-age=300" })
                             .body(Body::from(html))
                             .unwrap()
                     }),
@@ -291,6 +295,9 @@ impl<S: Send + Sync + 'static> App<S> {
             );
         }
 
+        if crate::dev::enabled() {
+            router = crate::dev::install(router);
+        }
         Ok(router.fallback(|| async { error_page(&Error::NotFound) }))
     }
 }
@@ -350,10 +357,11 @@ fn error_page(e: &Error) -> Response<Body> {
     }
     let status = StatusCode::from_u16(e.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let html = format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>{code}</title></head>\
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>{code}</title>{dev}</head>\
          <body><h1>{code}</h1><p>{msg}</p><p><a href=\"javascript:history.back()\">Go back</a></p></body></html>",
         code = status.as_u16(),
-        msg = escape(e.public_message())
+        msg = escape(e.public_message()),
+        dev = crate::dev::script_tag(),
     );
     Response::builder()
         .status(status)
@@ -377,13 +385,17 @@ fn json_error(e: &Error) -> Response<Body> {
 }
 
 /// The HTML document around a page body. Called by generated code.
-pub fn document(title: &str, css: Option<&str>, body: &str, payload: Option<&str>, js: Option<&str>) -> String {
+///
+/// `css` lists stylesheet URLs in cascade order: app-wide sheets (such as
+/// Tailwind) first, then the page's own `<style>` block.
+pub fn document(title: &str, css: &[&str], body: &str, payload: Option<&str>, js: Option<&str>) -> String {
     let mut out = String::with_capacity(body.len() + 512);
     out.push_str("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n");
     out.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>");
     crate::js::escape_into(&mut out, title);
     out.push_str("</title>\n");
-    if let Some(css) = css {
+    out.push_str(&crate::dev::script_tag());
+    for css in css {
         out.push_str(&format!("<link rel=\"stylesheet\" href=\"{css}\">\n"));
     }
     if let Some(js) = js {

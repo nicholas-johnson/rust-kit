@@ -115,7 +115,7 @@ pub fn render(ctx: &Ctx, _root: &Path) -> String {
     let js = page.js.clone().expect("showcase is interactive").replace("__RUNTIME__", "runtime.js");
     let rust = indent(&page.rust);
     let fields = page.rust.matches("m.insert(").count();
-    let runtime = runtime_js().len();
+    let runtime = runtime_js(false).len();
     let diag = compile_page(BROKEN, &opts).err().expect("broken sample fails").render("src/routes/account.rk", BROKEN);
 
     let mut s = head(

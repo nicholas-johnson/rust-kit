@@ -72,6 +72,45 @@ cargo run -p account-demo -- serve 127.0.0.1:3000
 cargo run -p account-demo -- build dist
 ```
 
+For development, run it under `rustkit dev` instead:
+
+```bash
+cargo run -p rustkit-cli -- dev -p account-demo --addr 127.0.0.1:3000
+```
+
+Then save a `.rk` page or any Rust file in the workspace. `rustkit dev`
+rebuilds the app and restarts it, and open pages update in place:
+
+- **Stylesheet-only changes** swap the `<link>`. Nothing else on the page is
+  touched, so focus, typed text and open panels stay as they were.
+- **Other changes** fetch the page again and update the body node by node, so
+  unchanged elements keep focus and typed text. The running page module is
+  stopped and the new one starts with the old `$state` and the data the page
+  had loaded in the browser. That data shows until a fresh copy arrives,
+  because the resolver may have changed. A block that re-renders because of
+  restored state is rebuilt, so text typed inside it is lost.
+- **When an update can't be done in place** (the page now redirects or
+  errors, say), the page reloads and restores its scroll position and
+  `$state`.
+
+- **No dropped requests.** The dev process owns the listening socket and hands
+  it to each new copy of the app, so requests made during a restart wait
+  instead of failing. Apps adopt the socket with `rustkit::dev::listener(addr)`.
+- **You stay signed in.** Sessions are saved under `target/rustkit-dev/`, so a
+  restart doesn't sign you out.
+- **Errors show in the browser.** If a build fails, the last good build keeps
+  running and open pages show the compiler's diagnostic over the content. If
+  nothing is running yet, the dev process serves a page with the error
+  itself. Either way, the page updates once the build succeeds.
+- Saving a file that doesn't change the binary doesn't restart anything.
+
+Dev mode adds `/_rk/dev.js` and `/_rk/dev/events`, and it serves prerendered
+pages with `no-cache`. It is on only when `rustkit dev` starts the app
+(`RUSTKIT_DEV=1`); `serve` and `build` are unchanged.
+`rustkit dev` also builds with `RUSTKIT_DEV=1`, which adds the hooks the dev
+client needs to the page runtime. A plain `cargo build` leaves them out, and a
+page whose runtime lacks them falls back to a full reload.
+
 `serve` imitates a 25 ms round trip to the accounts service. Sign in at
 `/login` as Alice or Bob (demo accounts with no password). `build` writes the
 prerendered routes and assets to `dist/` and prints JavaScript and CSS bytes per route.
@@ -95,8 +134,37 @@ exactly as written. For that page the compiler emits:
   `GET /_rk/source/{name}`. That endpoint runs the same resolver with the same
   session. `account` is server-only, so it has no endpoint.
 - **Assets**: a content-hashed page module (662 B gzipped for the account page),
-  the shared runtime (2.7 KB gzipped), and a stylesheet. A page with no state
+  the shared runtime (2.8 KB gzipped), and a stylesheet. A page with no state
   and no handlers gets no module and no `<script>` tag.
+
+### Tailwind CSS
+
+Tailwind is off by default. To turn it on, change the crate's `build.rs` to:
+
+```rust
+fn main() {
+    rustkit_compiler::Build::new().tailwind().run();
+}
+```
+
+Then use utility classes in any `.rk` template. The build runs the Tailwind v4
+CLI once and writes one minified, content-hashed stylesheet. Every page links
+that stylesheet before its own `<style>` block, so page styles still win.
+`build` reports the stylesheet in each route's CSS bytes.
+
+- **CLI**: the build uses the first of these that it finds:
+  `$RUSTKIT_TAILWIND`, the crate's `node_modules/.bin/tailwindcss` (from
+  `npm install -D @tailwindcss/cli`), or the
+  [standalone `tailwindcss`](https://tailwindcss.com/blog/standalone-cli) on
+  `PATH`. If none is found, the build fails and says how to install one.
+  An npm-installed CLI outside the crate works for the default input. A
+  `src/tailwind.css` that writes `@import "tailwindcss"` needs the CLI
+  installed in the crate, or the standalone CLI.
+- **Input**: with no `src/tailwind.css`, the build uses
+  `@import "tailwindcss" source(none); @source "./src/routes";`. Add
+  `src/tailwind.css` to use `@theme`, plugins, or more `@source` paths.
+- Class names must appear whole in the template, as Tailwind requires. Use
+  `"bg-red-500"`, not `"bg-" + color`.
 
 ### The language boundary
 

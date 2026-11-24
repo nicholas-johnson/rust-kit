@@ -92,3 +92,75 @@ fn unknown_names_and_missing_imports_are_diagnosed() {
     let d = compile_page("<DataSource source={account} load=\"server\"></DataSource>", &OPTS).err().unwrap();
     assert!(d.msg.contains("not imported"));
 }
+
+#[test]
+fn production_runtime_leaves_out_dev_hooks() {
+    let prod = crate::runtime_js(false);
+    let dev = crate::runtime_js(true);
+    assert!(!prod.contains("__rkDev") && !prod.contains("dev:"));
+    assert!(dev.contains("__rkDev") && dev.contains("dev.attach(") && !dev.contains("// dev:start"));
+    // Every hook line is in a marked region.
+    assert_eq!(crate::RUNTIME_JS.matches("// dev:start").count(), crate::RUNTIME_JS.matches("// dev:end").count());
+}
+
+/// A stand-in Tailwind CLI: records its arguments and stdin, prints CSS.
+#[cfg(unix)]
+fn fake_tailwind(dir: &std::path::Path) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let cli = dir.join("fake-tailwindcss");
+    std::fs::write(&cli, "#!/bin/sh\necho \"$@\" > args.txt\ncat > stdin.txt\nprintf '.p-4{padding:1rem}'\n").unwrap();
+    std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+    cli
+}
+
+#[cfg(unix)]
+#[test]
+fn tailwind_stylesheet_is_linked_before_page_css() {
+    let dir = std::env::temp_dir().join(format!("rk-tailwind-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src/routes")).unwrap();
+    std::fs::write(dir.join("src/routes/index.rk"), "<p class=\"p-4\">Hi</p>\n<style>p { color: red; }</style>\n").unwrap();
+    std::fs::write(dir.join("src/routes/plain.rk"), "<p class=\"p-4\">Hi</p>\n").unwrap();
+    let cfg = Config {
+        routes_dir: dir.join("src/routes"),
+        out_dir: dir.join("out"),
+        state_type: "crate::AppState".into(),
+        sources_module: "crate::sources".into(),
+        crate_dir: dir.clone(),
+        tailwind: Some(Tailwind { cli: Some(fake_tailwind(&dir)), input: None, minify: true }),
+        dev: false,
+    };
+    let summaries = compile(&cfg).unwrap();
+
+    // Ran once in the crate dir, reading the default input from stdin.
+    assert_eq!(std::fs::read_to_string(dir.join("args.txt")).unwrap().trim(), "--input - --minify");
+    assert!(std::fs::read_to_string(dir.join("stdin.txt")).unwrap().contains("@source \"./src/routes\""));
+
+    let css = ".p-4{padding:1rem}";
+    let name = format!("tailwind.{}.css", hash(css));
+    assert_eq!(std::fs::read_to_string(dir.join("out/rk_assets").join(&name)).unwrap(), css);
+    let generated = std::fs::read_to_string(dir.join("out/rustkit_generated.rs")).unwrap();
+    let tw_url = format!("/_rk/assets/{name}");
+    // A page with its own <style> links Tailwind first; a page without one links only Tailwind.
+    assert!(generated.contains(&format!("const CSS: &[&str] = &[\"{tw_url}\", \"/_rk/assets/index.")));
+    assert!(generated.contains(&format!("const CSS: &[&str] = &[\"{tw_url}\"];")));
+    let plain = summaries.iter().find(|s| s.path == "/plain").unwrap();
+    assert_eq!(plain.css_bytes, css.len());
+
+    // A user stylesheet at src/tailwind.css is passed as a file instead.
+    std::fs::write(dir.join("src/tailwind.css"), "@import \"tailwindcss\";\n").unwrap();
+    compile(&cfg).unwrap();
+    let args = std::fs::read_to_string(dir.join("args.txt")).unwrap();
+    assert!(args.trim().ends_with("src/tailwind.css --minify"), "{args}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn tailwind_without_a_cli_explains_how_to_install_it() {
+    let dir = std::env::temp_dir().join(format!("rk-tailwind-missing-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let tw = Tailwind { cli: Some(dir.join("no-such-tailwindcss")), input: None, minify: true };
+    let err = tw.run(&dir).unwrap_err();
+    assert!(err.contains("running"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
