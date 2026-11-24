@@ -74,6 +74,19 @@ async fn text_is_escaped_and_numbers_format_like_javascript() {
 }
 
 #[tokio::test]
+async fn floats_render_as_the_browser_will_receive_them() {
+    let res = send(&router().await, get("/nan", None)).await;
+    assert_eq!(res.inner("nan"), "[]", "NaN travels as null");
+    assert_eq!(res.inner("inf"), "[]", "Infinity travels as null");
+    assert_eq!(res.inner("nan-falsy"), "F");
+    assert_eq!(res.inner("inf-null"), "true");
+    let payload = res.payload().unwrap();
+    assert_eq!(payload["s"]["samples"]["notANumber"], serde_json::Value::Null);
+    let tenth = payload["s"]["samples"]["tenth"].to_string();
+    assert_eq!(res.inner("tenth"), tenth, "an f32 renders as the f64 the payload carries");
+}
+
+#[tokio::test]
 async fn attributes_follow_the_boolean_and_escaping_rules() {
     let res = send(&router().await, get("/attributes", None)).await;
     assert_eq!(res.tag("a-quoted"), r#"<input id="a-quoted" value="She said &quot;yes&quot; &amp; he said &#39;no&#39;">"#);

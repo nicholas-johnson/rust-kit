@@ -33,15 +33,18 @@ Field reads go through the `ToJs` trait:
 |---|---|
 | `String`, `str` | `Str`, borrowed, not copied |
 | `bool` | `Bool` |
-| `i8` to `i64`, `isize`, `u8` to `u64`, `usize`, `f32`, `f64` | `Num`, converted with `as f64` |
+| `i8` to `i64`, `isize`, `u8` to `u64`, `usize` | `Num`, converted with `as f64` |
+| `f64`, `f32` | `Num` when finite (an `f32` is widened to `f64`); `NaN` and `±Infinity` are `Null` |
 | `Option<T>` | `None` is `Null`; `Some(v)` is `v`'s value |
 | `&T`, `Box<T>` | the inner value |
 | `Val` | itself |
 
 Anything else, such as a `Vec`, a struct or a `chrono` date, has no `ToJs` implementation, so interpolating it is a rustc error at build time. Format dates and money in the resolver and expose the result as a `String` field.
 
-> [!WARNING]
-> Use `f64` for fractional numbers in views, not `f32`. The server converts `0.1f32` to `f64` and renders `0.10000000149011612`, while `serde_json` sends the same field to the browser as `0.1`. The two renderings then differ.
+Floats render as the value the browser will receive. Server data reaches the browser through `serde_json::to_value`, and JSON has no `NaN` or `Infinity`, so a non-finite field becomes `null` in both targets: it renders as empty text, it is falsy, and `=== null` is true. The same function widens an `f32` to `f64`, so both targets render `0.1f32` as `0.10000000149011612`.
+
+> [!TIP]
+> Use `f64` for fractional numbers in views if you want `0.1` to read as `0.1`. If a missing or undefined number should say something, decide that in the resolver, for example with an `Option<f64>` and an `{#if}`.
 
 Integers above 2^53 lose precision when converted to `f64`, exactly as they do in the browser's `JSON.parse`. Send large ids as strings.
 
@@ -58,7 +61,7 @@ Conditions in `{#if}` and the operands of `!`, `&&` and `||` use JavaScript's `B
 | `undefined`, `null` | no |
 | `false` | no |
 | `0`, `-0`, `NaN` | no |
-| any other number, including `Infinity` | yes |
+| any other number | yes |
 | `""` | no |
 | any other string, including `"0"` and `"false"` | yes |
 
@@ -140,7 +143,7 @@ Interpolated numbers use JavaScript's `Number.prototype.toString()`:
 | `123456.0` | `123456` |
 | `1e21` | `1e+21` |
 | `1.5e-7` | `1.5e-7` |
-| `NaN`, `Infinity`, `-Infinity` | `NaN`, `Infinity`, `-Infinity` |
+| `f64::NAN`, `f64::INFINITY` fields | empty text, because they reach the browser as `null` |
 
 Between `1e-6` and `1e21` the renderer uses Rust's shortest round-trip formatting, which matches ECMAScript in that range. Outside it, numbers use exponent notation with an explicit `+` on positive exponents. There is no locale formatting such as thousands separators; do that in the resolver.
 

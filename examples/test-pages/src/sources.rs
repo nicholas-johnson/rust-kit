@@ -29,9 +29,11 @@ pub struct SamplesView {
     pub small: f64,
     pub neg_zero: f64,
     pub half: f64,
-    /// JSON cannot represent these; see `nan.rk` and the parity tests.
+    /// JSON cannot represent these, so both renderers show them as null.
     pub not_a_number: f64,
     pub infinite: f64,
+    /// Travels as the widened f64 `0.10000000149011612`; both sides render that.
+    pub tenth: f32,
     pub count: i64,
     pub zero: i64,
     pub negative: i32,
@@ -64,6 +66,7 @@ pub async fn samples(_ctx: &Ctx) -> Result<SamplesView, Error> {
         half: 0.5,
         not_a_number: f64::NAN,
         infinite: f64::INFINITY,
+        tenth: 0.1,
         count: 123_456_789,
         zero: 0,
         negative: -42,

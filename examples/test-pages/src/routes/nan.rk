@@ -3,17 +3,20 @@
   let live = $state(true);
 </script>
 
-<title>NaN and Infinity</title>
+<title>Floats that JSON can't carry</title>
 
 <p><a href="/">← All pages</a></p>
-<h1>NaN and Infinity</h1>
-<p>A known divergence. Rust renders these values directly, but the handoff payload is JSON, which has no NaN or Infinity, so they reach the browser as <code>null</code>. Toggle the region twice to see the browser's version.</p>
+<h1>Floats that JSON can't carry</h1>
+<p>Server data reaches the browser as JSON, which has no NaN or Infinity, and an f32 is widened to f64 on the way. Rust renders each value as the browser will receive it, so toggling the region twice changes nothing.</p>
 <button id="toggle" onclick={() => live = !live}>Toggle the live region</button>
 <DataSource source={samples} load="server" let:data>
   {#if live}
   <dl id="out">
-    <dt>NaN</dt><dd id="nan">{data.notANumber}</dd>
-    <dt>Infinity</dt><dd id="inf">{data.infinite}</dd>
+    <dt>NaN</dt><dd id="nan">[{data.notANumber}]</dd>
+    <dt>Infinity</dt><dd id="inf">[{data.infinite}]</dd>
+    <dt>NaN is falsy</dt><dd id="nan-falsy">{#if data.notANumber}T{:else}F{/if}</dd>
+    <dt>Infinity is null</dt><dd id="inf-null">{data.infinite === null}</dd>
+    <dt>f32 0.1</dt><dd id="tenth">{data.tenth}</dd>
   </dl>
   {/if}
 </DataSource>

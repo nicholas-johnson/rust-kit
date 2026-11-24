@@ -35,9 +35,10 @@ real runtime in Node, renders every block, and requires the same HTML Rust
 produced, including after state changes and for client-loaded data. It needs
 `node` on `PATH`; it is skipped locally without it and required in CI.
 
-One divergence is known and pinned by an ignored test: `NaN` and `Infinity`
-render in Rust but arrive in the browser as `null`, because the handoff payload
-is JSON.
+The parity tests found one real divergence, now fixed: `NaN` and `Infinity`
+used to render in Rust but reach the browser as `null`, because the handoff
+payload is JSON. Rust now renders non-finite floats as `null` too, and the
+`/nan` page keeps it covered.
 
 ## The website
 

@@ -25,7 +25,7 @@ A `{` always starts an expression. To show a literal brace, write the entity: `&
 | Value | Renders as |
 | --- | --- |
 | String | The string, escaped |
-| Number | JavaScript formatting: `3`, `0.5`, `1e+21`, `NaN` |
+| Number | JavaScript formatting: `3`, `0.5`, `1e+21`. `NaN` and `Infinity` fields render as empty text |
 | `true` / `false` | `true` / `false` |
 | `null`, `undefined`, Rust `None` | Nothing (empty text) |
 

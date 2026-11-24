@@ -151,7 +151,22 @@ macro_rules! num_to_js {
         }
     )*};
 }
-num_to_js!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, f32, f64);
+num_to_js!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize);
+
+// Floats render as the value the browser receives. Server data reaches the
+// browser through `serde_json::to_value`, and JSON has no NaN or Infinity, so
+// those become `null`. (`to_value` also widens an `f32` to `f64`, so `0.1f32`
+// travels as `0.10000000149011612`, which is what `f64::from` gives here.)
+impl ToJs for f64 {
+    fn to_js(&self) -> Val<'_> {
+        if self.is_finite() { Val::Num(*self) } else { Val::Null }
+    }
+}
+impl ToJs for f32 {
+    fn to_js(&self) -> Val<'_> {
+        if self.is_finite() { Val::Num(f64::from(*self)) } else { Val::Null }
+    }
+}
 
 /// Values with a JavaScript `.length`: strings count UTF-16 code units, as in
 /// the browser; lists count elements.
@@ -308,6 +323,21 @@ mod tests {
         assert!(lt(&Val::str("10"), &Val::str("9")));
         assert!(gt(&Val::str("10"), &Val::Num(9.0)));
         assert!(!le(&Val::Num(f64::NAN), &Val::Num(1.0)));
+    }
+
+    #[test]
+    fn floats_render_as_their_json_value() {
+        let text = |v: &dyn ToJs| v.to_js().to_text().into_owned();
+        for v in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(v.to_js(), Val::Null, "{v}");
+            assert_eq!(serde_json::to_value(v).unwrap(), serde_json::Value::Null);
+        }
+        assert_eq!(text(&f32::NAN), "");
+        // The payload is built with `to_value`, which widens f32 to f64.
+        let sent = serde_json::to_value(0.1f32).unwrap().to_string();
+        assert_eq!(sent, "0.10000000149011612");
+        assert_eq!(text(&0.1f32), sent);
+        assert_eq!(text(&(0.1f64 + 0.2)), "0.30000000000000004");
     }
 
     #[test]

@@ -187,35 +187,12 @@ fn keys(blocks: &[(String, String)]) -> Vec<String> {
     k
 }
 
-/// Pages that document a divergence still to be fixed. Each has its own test below.
-const KNOWN_DIVERGENT: &[&str] = &["/nan"];
-
-/// Known bug: Rust renders `NaN` and `Infinity`, but the handoff payload is
-/// JSON, where serde_json writes them as `null`, so the browser renders empty
-/// text. Remove `#[ignore]` and the `KNOWN_DIVERGENT` entry once fixed.
-#[tokio::test]
-#[ignore = "known divergence: non-finite floats become null in the handoff payload"]
-async fn non_finite_numbers_render_the_same() {
-    let Some(node) = node() else { return };
-    let router = router().await;
-    let page = load(&router, "/nan").await;
-    let ssr = ssr_blocks(&page.html.body);
-    let js = run(node, &page, &keys(&ssr), json!({}), json!({}));
-    for (key, rust_html) in &ssr {
-        assert_eq!(normalize(&js[key]), normalize(rust_html), "/nan block {key}");
-    }
-}
-
 #[tokio::test]
 async fn every_block_renders_the_same_in_rust_and_the_browser() {
     let Some(node) = node() else { return };
     let app = test_pages::app(false);
-    let paths: Vec<&str> = app
-        .routes()
-        .iter()
-        .filter(|r| r.js_bytes > 0 && !KNOWN_DIVERGENT.contains(&r.path))
-        .map(|r| r.path)
-        .collect();
+    let paths: Vec<&str> = app.routes().iter().filter(|r| r.js_bytes > 0).map(|r| r.path).collect();
+    assert!(paths.contains(&"/nan"), "the float edge cases are covered");
     let router = app.into_router().await.unwrap();
 
     let mut checked = 0;
