@@ -20,6 +20,11 @@ pub use codegen::Options;
 
 const RUNTIME_JS: &str = include_str!("runtime.js");
 
+/// The browser runtime every interactive route loads, as shipped.
+pub fn runtime_js() -> &'static str {
+    RUNTIME_JS
+}
+
 /// A compile error at a byte offset in a page file.
 #[derive(Debug, Clone)]
 pub struct Diag {

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs><radialGradient id="glow" cx=".25" cy=".35" r=".7"><stop offset="0" stop-color="#ea580c" stop-opacity=".35"/><stop offset="1" stop-color="#14110f" stop-opacity="0"/></radialGradient>
+  <radialGradient id="glow2" cx=".85" cy=".8" r=".5"><stop offset="0" stop-color="#14b8a6" stop-opacity=".22"/><stop offset="1" stop-color="#14110f" stop-opacity="0"/></radialGradient></defs>
+  <rect width="1200" height="630" fill="#14110f"/><rect width="1200" height="630" fill="url(#glow)"/><rect width="1200" height="630" fill="url(#glow2)"/>
+  <g transform="translate(96 150) scale(3.4)"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff8a3d"/><stop offset="1" stop-color="#c2410c"/></linearGradient></defs>
+  <path d="M32 3.5 56.7 17.75v28.5L32 60.5 7.3 46.25v-28.5Z" fill="url(#g)" stroke="url(#g)" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M32 7.5 53.3 19.8v24.4L32 56.5 10.7 44.2V19.8Z" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width="1.2" stroke-linejoin="round"/>
+  <rect x="18.5" y="16" width="7.5" height="32" rx="2.2" fill="#fff"/>
+  <path d="M46 18.5 31.5 32 46 45.5" fill="none" stroke="#0f766e" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".55" transform="translate(.6 1.2)"/>
+  <path d="M46 18.5 31.5 32 46 45.5" fill="none" stroke="#2dd4bf" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <text x="340" y="275" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Inter, Roboto, sans-serif" font-size="112" font-weight="800" letter-spacing="-4" fill="#f5efe9">rust<tspan fill="#ff7a2f">-kit</tspan></text>
+  <text x="346" y="350" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Inter, Roboto, sans-serif" font-size="40" font-weight="500" fill="#d6cfc7">Rust renders. The browser responds.</text>
+  <text x="96" y="530" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="26" fill="#a8a29e">page.rk  →  <tspan fill="#ff7a2f">native Rust renderer</tspan>  +  <tspan fill="#2dd4bf">just enough JavaScript</tspan></text>
+</svg>

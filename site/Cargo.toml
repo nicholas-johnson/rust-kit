@@ -1,0 +1,11 @@
+[package]
+name = "site"
+description = "Generates rust-kit.com: docs, tutorials and the landing page"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+rustkit-compiler = { path = "../crates/rustkit-compiler" }

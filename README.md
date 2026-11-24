@@ -1,4 +1,8 @@
+<p align="center"><img src="site/static/logo.svg" alt="Rust-kit" width="360"></p>
+
 # Rust-kit
+
+**Rust renders. The browser responds.** Docs and tutorials: [rust-kit.com](https://rust-kit.com).
 
 A working first milestone of the Rust-kit design proposal (November 2026).
 You write a page as a template, a script, and a stylesheet. At build time,
@@ -10,7 +14,26 @@ correctly before any JavaScript runs.
 crates/rustkit-compiler   .rk parser, expression checker, Rust + JS codegen, browser runtime
 crates/rustkit            request context, sessions, CSRF, router, JS value semantics
 examples/account-demo     the proposal's static article and account page
+site                      generator for rust-kit.com (docs, tutorials, landing page)
 ```
+
+## The website
+
+`site/` turns `site/content/{docs,tutorials}/*.md` into rust-kit.com. Every
+`rk` code block is compiled by the real compiler during the build; the
+generated Rust and JavaScript appear under the sample, and a sample that stops
+compiling fails the build. Internal links and anchors are checked too.
+
+```bash
+cargo run -p site -- build
+```
+
+```bash
+python3 -m http.server 4180 --directory site/dist
+```
+
+`.github/workflows/pages.yml` runs the tests, builds the site and deploys it to
+GitHub Pages on every push to `main`.
 
 ## Run it
 
@@ -99,15 +122,16 @@ The browser half was checked by hand in Chromium:
 
 ## Security defaults
 
-- Sessions use an opaque 256-bit cookie (`HttpOnly`, `SameSite=Lax`, `Secure`
-  except on loopback) with server-side state.
+- Sessions use an opaque 256-bit cookie (`HttpOnly`, `SameSite=Lax`, and `Secure`
+  unless the app turns it off; the demo does so on loopback) with server-side
+  state.
 - The session id rotates at sign-in.
 - Every action checks the CSRF token with a constant-time comparison and
   checks `Origin`.
 - Every `<form method="post">` gets its CSRF token automatically, whether Rust
   or the browser renders the form.
 - Personalised responses are `private, no-store` with `Vary: Cookie`.
-- Every response carries a `Server-Timing` header with `sources;dur=…` and
+- Every request-time page carries a `Server-Timing` header with `sources;dur=…` and
   `render;dur=…`, which separates upstream latency from render CPU time.
 
 ## Not in this milestone
@@ -125,7 +149,7 @@ The browser half was checked by hand in Chromium:
 - **Handlers in server-rendered loops**: a handler inside a server-rendered
   `{#each}` can't read the loop item yet. This is diagnosed.
 - **Sources**: they take no inputs, and there is no client refresh. A failed
-  client load shows a Retry button and keeps earlier rows.
+  client load shows a Retry button.
 - **Not built yet**: CSS scoping, layouts, dynamic route parameters,
   persistent session storage, and component imports.
 - **Views**: they must serialize with `#[serde(rename_all = "camelCase")]` so

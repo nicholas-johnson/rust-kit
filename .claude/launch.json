@@ -15,6 +15,12 @@
         "127.0.0.1:3917"
       ],
       "port": 3917
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "4180", "--bind", "127.0.0.1", "--directory", "site/dist"],
+      "port": 4180
     }
   ]
 }
