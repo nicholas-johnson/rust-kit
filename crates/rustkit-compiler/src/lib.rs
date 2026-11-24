@@ -20,6 +20,22 @@ pub use codegen::Options;
 
 const RUNTIME_JS: &str = include_str!("runtime.js");
 
+/// The browser runtime. Lines between `// dev:start` and `// dev:end` are
+/// hooks for the `rustkit dev` client; production builds leave them out.
+pub fn runtime_js(dev: bool) -> String {
+    let mut out = String::with_capacity(RUNTIME_JS.len());
+    let mut skipping = false;
+    for line in RUNTIME_JS.split_inclusive('\n') {
+        match line.trim() {
+            "// dev:start" => skipping = !dev,
+            "// dev:end" => skipping = false,
+            _ if !skipping => out.push_str(line),
+            _ => {}
+        }
+    }
+    out
+}
+
 /// A compile error at a byte offset in a page file.
 #[derive(Debug, Clone)]
 pub struct Diag {
@@ -89,6 +105,8 @@ pub struct Config {
     pub state_type: String,
     /// Module holding the source resolvers, e.g. `crate::sources`.
     pub sources_module: String,
+    /// Include the runtime hooks `rustkit dev` uses to update pages in place.
+    pub dev: bool,
 }
 
 /// Per-route numbers reported by a build.
@@ -141,7 +159,8 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
     let asset_dir = cfg.out_dir.join("rk_assets");
     fs::create_dir_all(&asset_dir).map_err(|e| e.to_string())?;
 
-    let runtime_name = format!("runtime.{}.js", hash(RUNTIME_JS));
+    let runtime = runtime_js(cfg.dev);
+    let runtime_name = format!("runtime.{}.js", hash(&runtime));
     let mut assets: Vec<(String, &str, String)> = Vec::new();
     let mut runtime_used = false;
     let mut modules = String::new();
@@ -174,7 +193,7 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
             runtime_used = true;
             let js = js.replace("__RUNTIME__", &runtime_name);
             let name = format!("{stem}.{}.js", hash(&js));
-            js_bytes = js.len() + RUNTIME_JS.len();
+            js_bytes = js.len() + runtime.len();
             assets.push((name.clone(), "text/javascript; charset=utf-8", js));
             format!("/_rk/assets/{name}")
         });
@@ -206,7 +225,7 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
         return Err(errors);
     }
     if runtime_used {
-        assets.push((runtime_name, "text/javascript; charset=utf-8", RUNTIME_JS.to_owned()));
+        assets.push((runtime_name, "text/javascript; charset=utf-8", runtime));
     }
 
     let st = &cfg.state_type;
@@ -248,8 +267,11 @@ pub fn build_script() {
         out_dir: PathBuf::from(std::env::var("OUT_DIR").expect("run from build.rs")),
         state_type: "crate::AppState".into(),
         sources_module: "crate::sources".into(),
+        // `rustkit dev` sets this for its builds.
+        dev: std::env::var("RUSTKIT_DEV").is_ok_and(|v| v == "1"),
     };
     println!("cargo:rerun-if-changed=src/routes");
+    println!("cargo:rerun-if-env-changed=RUSTKIT_DEV");
     match compile(&cfg) {
         Ok(_) => {}
         Err(e) => {

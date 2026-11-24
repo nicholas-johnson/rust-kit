@@ -150,6 +150,8 @@ fn build(ws: &Workspace, flags: &[String]) -> Result<Built, String> {
     let mut child = Command::new("cargo")
         .args(["build", "-p", &ws.package, "--message-format=json-render-diagnostics", "--color=always"])
         .args(flags)
+        // Builds the page runtime with the hooks the dev client uses.
+        .env("RUSTKIT_DEV", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

@@ -92,3 +92,13 @@ fn unknown_names_and_missing_imports_are_diagnosed() {
     let d = compile_page("<DataSource source={account} load=\"server\"></DataSource>", &OPTS).err().unwrap();
     assert!(d.msg.contains("not imported"));
 }
+
+#[test]
+fn production_runtime_leaves_out_dev_hooks() {
+    let prod = crate::runtime_js(false);
+    let dev = crate::runtime_js(true);
+    assert!(!prod.contains("__rkDev") && !prod.contains("dev:"));
+    assert!(dev.contains("__rkDev") && dev.contains("dev.attach(") && !dev.contains("// dev:start"));
+    // Every hook line is in a marked region.
+    assert_eq!(crate::RUNTIME_JS.matches("// dev:start").count(), crate::RUNTIME_JS.matches("// dev:end").count());
+}

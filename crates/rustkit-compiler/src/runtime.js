@@ -37,10 +37,13 @@ export function start($s, page) {
   let queued = false;
   let stopped = false;
   const listening = new AbortController();
+  // dev:start
   // Under `rustkit dev`, data a replaced copy of this page had loaded. It is
   // shown until a fresh copy arrives, since the resolver may have changed.
+  // Lines between dev:start and dev:end are left out of production builds.
   const dev = globalThis.__rkDev;
   for (const [name, data] of dev?.carried() ?? []) sources.set(name, { status: "stale", data });
+  // dev:end
 
   const r = {
     esc,
@@ -208,6 +211,7 @@ export function start($s, page) {
     const src = page.blocks[inst.key].source;
     if (src) load(src, false);
   }
+  // dev:start
   if (dev) {
     // Show carried data in place of the loading regions while it refetches.
     refresh((i) => sources.get(page.blocks[i.key].source)?.data !== undefined);
@@ -221,4 +225,5 @@ export function start($s, page) {
       },
     });
   }
+  // dev:end
 }

@@ -132,6 +132,9 @@
     const body = next.body.innerHTML;
     if (body === served) return styles ? "stylesheets" : "nothing";
 
+    // A runtime built without dev hooks (by plain `cargo build`) never
+    // attaches, so its listeners can't be removed.
+    if (!page && document.querySelector('script[type="module"][src]')) throw new Error("the page runtime has no dev hooks");
     carry = page ? { state: primitives(page.state), sources: [...page.sources].map(([n, s]) => [n, s.data]).filter(([, d]) => d !== undefined) } : null;
     page?.stop();
     page = null;

@@ -61,6 +61,9 @@ rebuilds the app and restarts it, and open pages update in place:
 Dev mode adds `/_rk/dev.js` and `/_rk/dev/events`, and it serves prerendered
 pages with `no-cache`. It is on only when `rustkit dev` starts the app
 (`RUSTKIT_DEV=1`); `serve` and `build` are unchanged.
+`rustkit dev` also builds with `RUSTKIT_DEV=1`, which adds the hooks the dev
+client needs to the page runtime. A plain `cargo build` leaves them out, and a
+page whose runtime lacks them falls back to a full reload.
 
 `serve` imitates a 25 ms round trip to the accounts service. Sign in at
 `/login` as Alice or Bob (demo accounts with no password). `build` writes the
@@ -85,7 +88,7 @@ exactly as written. For that page the compiler emits:
   `GET /_rk/source/{name}`. That endpoint runs the same resolver with the same
   session. `account` is server-only, so it has no endpoint.
 - **Assets**: a content-hashed page module (662 B gzipped for the account page),
-  the shared runtime (2.7 KB gzipped), and a stylesheet. A page with no state
+  the shared runtime (2.8 KB gzipped), and a stylesheet. A page with no state
   and no handlers gets no module and no `<script>` tag.
 
 ### The language boundary
