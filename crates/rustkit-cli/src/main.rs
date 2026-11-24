@@ -283,7 +283,10 @@ struct Session<'a> {
 impl Session<'_> {
     fn spawn(&mut self, exe: &Path) -> Result<(), String> {
         self.build_no += 1;
-        if let Some(app) = self.app.take() {
+        if let Some(mut app) = self.app.take() {
+            // Let open pages' event streams end cleanly first.
+            app.tell(serde_json::json!({ "status": "restarting" }));
+            thread::sleep(Duration::from_millis(50));
             app.stop();
         }
         if let Some(f) = self.fallback.take() {

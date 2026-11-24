@@ -35,6 +35,12 @@ export function start($s, page) {
   let seq = 0;
   let owner = null;
   let queued = false;
+  let stopped = false;
+  const listening = new AbortController();
+  // Under `rustkit dev`, data a replaced copy of this page had loaded. It is
+  // shown until a fresh copy arrives, since the resolver may have changed.
+  const dev = globalThis.__rkDev;
+  for (const [name, data] of dev?.carried() ?? []) sources.set(name, { status: "stale", data });
 
   const r = {
     esc,
@@ -75,7 +81,7 @@ export function start($s, page) {
 
   function load(name, force) {
     let st = sources.get(name);
-    if (st && !force) return st;
+    if (st && !force && st.status !== "stale") return st;
     st = { status: "loading", data: st?.data };
     sources.set(name, st);
     fetch("/_rk/source/" + encodeURIComponent(name), {
@@ -92,7 +98,7 @@ export function start($s, page) {
           st.status = "error";
         },
       )
-      .then(() => refresh((i) => page.blocks[i.key].source === name));
+      .then(() => stopped || refresh((i) => page.blocks[i.key].source === name));
     return st;
   }
 
@@ -157,6 +163,7 @@ export function start($s, page) {
     queued = true;
     queueMicrotask(() => {
       queued = false;
+      if (stopped) return;
       const keys = new Set(changed);
       changed.clear();
       refresh((i) => page.blocks[i.key].deps.some((d) => keys.has(d)));
@@ -186,14 +193,14 @@ export function start($s, page) {
           }
         }
       },
-      true,
+      { capture: true, signal: listening.signal },
     );
   }
 
   document.addEventListener("click", (ev) => {
     const name = ev.target.closest?.("[data-rk-retry]")?.getAttribute("data-rk-retry");
     if (name) load(name, true) && refresh((i) => page.blocks[i.key].source === name);
-  });
+  }, { signal: listening.signal });
 
   bind(document.body);
   // Server-rendered client sources show a loading region; fetch them now.
@@ -201,6 +208,17 @@ export function start($s, page) {
     const src = page.blocks[inst.key].source;
     if (src) load(src, false);
   }
-  // Under `rustkit dev`, restores state saved before a reload.
-  globalThis.__rkDev?.adopt($s);
+  if (dev) {
+    // Show carried data in place of the loading regions while it refetches.
+    refresh((i) => sources.get(page.blocks[i.key].source)?.data !== undefined);
+    // Hands the page to the dev client, which may restore earlier state.
+    dev.attach({
+      state: $s,
+      sources,
+      stop() {
+        stopped = true;
+        listening.abort();
+      },
+    });
+  }
 }

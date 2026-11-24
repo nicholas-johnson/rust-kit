@@ -12,6 +12,8 @@
 //! The dev process writes one JSON status per line to the application's
 //! stdin (`{"status":"building"}`, `{"status":"failed","output":"…"}`,
 //! `{"status":"idle"}`). They are forwarded to every open page.
+//! `{"status":"restarting"}` comes just before the application is stopped;
+//! it ends every event stream cleanly so browsers reconnect without errors.
 
 use std::convert::Infallible;
 use std::io::BufRead;
@@ -78,6 +80,10 @@ struct Hub {
 
 impl Hub {
     fn publish(&self, json: &str) {
+        if json.contains(r#""status":"restarting""#) {
+            self.subscribers.lock().unwrap().clear();
+            return;
+        }
         let frame = format!("event: status\ndata: {json}\n\n");
         *self.last.lock().unwrap() = Some(frame.clone());
         self.subscribers.lock().unwrap().retain(|tx| tx.send(frame.clone()).is_ok());

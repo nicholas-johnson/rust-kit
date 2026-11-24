@@ -33,20 +33,29 @@ cargo run -p rustkit-cli -- dev -p account-demo --addr 127.0.0.1:3000
 ```
 
 Then save a `.rk` page or any Rust file in the workspace. `rustkit dev`
-rebuilds the app, restarts it, and reloads open pages.
+rebuilds the app and restarts it, and open pages update in place:
+
+- **Stylesheet-only changes** swap the `<link>`. Nothing else on the page is
+  touched, so focus, typed text and open panels stay as they were.
+- **Other changes** fetch the page again and update the body node by node, so
+  unchanged elements keep focus and typed text. The running page module is
+  stopped and the new one starts with the old `$state` and the data the page
+  had loaded in the browser. That data shows until a fresh copy arrives,
+  because the resolver may have changed. A block that re-renders because of
+  restored state is rebuilt, so text typed inside it is lost.
+- **When an update can't be done in place** (the page now redirects or
+  errors, say), the page reloads and restores its scroll position and
+  `$state`.
 
 - **No dropped requests.** The dev process owns the listening socket and hands
   it to each new copy of the app, so requests made during a restart wait
   instead of failing. Apps adopt the socket with `rustkit::dev::listener(addr)`.
 - **You stay signed in.** Sessions are saved under `target/rustkit-dev/`, so a
   restart doesn't sign you out.
-- **Pages keep their place.** Before reloading, a page saves its scroll
-  position and its `$state`, and restores both afterwards. An open editor
-  stays open.
 - **Errors show in the browser.** If a build fails, the last good build keeps
   running and open pages show the compiler's diagnostic over the content. If
   nothing is running yet, the dev process serves a page with the error
-  itself. Either way, the page reloads once the build succeeds.
+  itself. Either way, the page updates once the build succeeds.
 - Saving a file that doesn't change the binary doesn't restart anything.
 
 Dev mode adds `/_rk/dev.js` and `/_rk/dev/events`, and it serves prerendered
