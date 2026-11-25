@@ -45,11 +45,13 @@ We will use this page as the running example:
 
 `build.rs` calls `rustkit_compiler::build_script()`, which finds every `.rk` file under `src/routes` and parses each one into:
 
-- the **page script**: `import { … } from "$sources"` lines, `let x = $state(literal)` lines, and whatever JavaScript is left over;
+- the **page script**: `import { … } from "$sources"` lines, `import Name from "$lib/….rk"` lines, `let x = $state(literal)` lines, and whatever JavaScript is left over;
 - the **module script** (`<script context="module">`), which is only checked for `export const prerender = true`;
 - the **stylesheet** from `<style>`;
 - the **title**, hoisted out of a top-level `<title>`;
-- the **template**: a tree of text, elements, `{expr}`, `{#if}`, `{#each}` and `<DataSource>` nodes.
+- the **template**: a tree of text, elements, `{expr}`, `{#if}`, `{#each}`, `<DataSource>` and imported component tags.
+
+A component import is inlined before the compiler looks for blocks, the same way a layout is inlined. See [Components](/docs/pages-and-routes/#components).
 
 Template expressions are parsed by a deliberately small expression parser. A call like `formatDate(x)` fails here, with a diagnostic pointing at the exact column. See [Expressions](/docs/expressions/).
 

@@ -142,7 +142,7 @@ When an event fires, the listener walks from the event target up to the document
 
 ## Page script code
 
-Anything in `<script>` that is not a `$sources` import or a `$state` line is copied into the page module, after the state object is created and before the runtime starts. It runs once per page load, in the browser only. Module scripts run after the document is parsed, so the DOM is available.
+Anything in `<script>` that is not a `$sources` import, a component import, or a `$state` line is copied into the page module, after the state object is created and before the runtime starts. It runs once per page load, in the browser only. Module scripts run after the document is parsed, so the DOM is available. A component's leftover script is copied the same way, once per page.
 
 ```rk title=clock.rk
 <script>
@@ -161,7 +161,7 @@ Rust renders `now` as an empty string; the browser fills it in on the first tick
 
 A page whose script contains only imports and state, and whose template has no blocks or handlers, ships no JavaScript at all.
 
-Imports other than `$sources` are not bundled or resolved. Keep page scripts self-contained for now.
+`import Name from "$lib/….rk"` inlines a [component](/docs/pages-and-routes/#components). Other imports are not bundled or resolved. Keep page scripts self-contained for now.
 
 ## Related
 

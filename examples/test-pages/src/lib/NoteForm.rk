@@ -1,0 +1,4 @@
+<form id={id} method="post" action={action}>
+  <label>Note <input name="message" value={value}></label>
+  <button>Save</button>
+</form>

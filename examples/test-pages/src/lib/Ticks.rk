@@ -1,0 +1,7 @@
+<script>
+  let ticks = $state(0);
+</script>
+
+<button id="tick" onclick={() => ticks = ticks + 1}>Tick</button>
+<output id="ticks">{ticks}</output>
+{#if ticks >= 2}<p id="tick-msg">ticked {ticks}</p>{/if}

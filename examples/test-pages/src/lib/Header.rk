@@ -1,0 +1,5 @@
+<header id="app-header">{label}</header>
+
+<style>
+  #app-header { font-weight: 600; }
+</style>

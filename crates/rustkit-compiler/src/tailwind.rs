@@ -17,8 +17,12 @@ pub const TAILWIND_ENV: &str = "RUSTKIT_TAILWIND";
 /// `tailwindcss` is the import to use. The npm CLI resolves a bare
 /// `"tailwindcss"` from the crate directory, so a CLI installed elsewhere
 /// needs the absolute path of its own copy (see [`bundled_import`]).
-fn default_input(tailwindcss: &str) -> String {
-    format!("@import {} source(none);\n@source \"./src/routes\";\n", css_string(tailwindcss))
+fn default_input(tailwindcss: &str, crate_dir: &std::path::Path) -> String {
+    let mut out = format!("@import {} source(none);\n@source \"./src/routes\";\n", css_string(tailwindcss));
+    if crate_dir.join("src/lib").is_dir() {
+        out.push_str("@source \"./src/lib\";\n");
+    }
+    out
 }
 
 fn css_string(s: &str) -> String {
@@ -30,13 +34,10 @@ fn css_string(s: &str) -> String {
 /// The standalone CLI bundles Tailwind and needs nothing here.
 fn bundled_import(cli: &Path) -> Option<String> {
     let real = cli.canonicalize().ok();
-    [Some(cli.to_path_buf()), real].into_iter().flatten().find_map(|p| {
-        p.ancestors()
-            .filter(|a| a.file_name().is_some_and(|n| n == "node_modules"))
-            .map(|nm| nm.join("tailwindcss/index.css"))
-            .find(|css| css.is_file())
-            .map(|css| css.to_string_lossy().into_owned())
-    })
+    [Some(cli.to_path_buf()), real]
+        .into_iter()
+        .flatten()
+        .find_map(|p| p.ancestors().filter(|a| a.file_name().is_some_and(|n| n == "node_modules")).map(|nm| nm.join("tailwindcss/index.css")).find(|css| css.is_file()).map(|css| css.to_string_lossy().into_owned()))
 }
 
 /// How to run Tailwind for one crate.
@@ -100,7 +101,7 @@ impl Tailwind {
             // Dropping the handle afterwards closes stdin so the CLI starts.
             let mut stdin = child.stdin.take().expect("stdin is piped");
             let import = bundled_import(&cli).unwrap_or_else(|| "tailwindcss".to_owned());
-            stdin.write_all(default_input(&import).as_bytes()).map_err(|e| format!("error: writing to Tailwind: {e}\n"))?;
+            stdin.write_all(default_input(&import, crate_dir).as_bytes()).map_err(|e| format!("error: writing to Tailwind: {e}\n"))?;
         }
         let out = child.wait_with_output().map_err(|e| format!("error: running {}: {e}\n", cli.display()))?;
         if !out.status.success() {

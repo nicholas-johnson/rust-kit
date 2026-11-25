@@ -1,0 +1,5 @@
+<footer id="site-footer">{note}</footer>
+
+<style>
+  #site-footer { margin-top: 2rem; font-size: 0.875rem; }
+</style>

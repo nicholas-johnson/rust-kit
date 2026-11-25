@@ -14,6 +14,7 @@ This page lists what exists, what does not exist yet, and the rough edges in wha
 | Area | Available in 0.1 |
 | --- | --- |
 | Pages | `.rk` files under `src/routes`, file-path routing, `index.rk`, nested directories, `layout.rk`, one `[param]` segment |
+| Components | `import Name from "$lib/….rk"` (or a relative `.rk` path), inlined into the page or layout, with required props and one `<slot />` |
 | Template | Text, `{expr}`, static/bound/mixed attributes, `{#if}`/`{:else if}`/`{:else}`, `{#each list as item, i}`, comments |
 | Expressions | Field reads, `.length`, literals, `!`, `&&`, `\|\|`, `===`, `!==`, `<`, `<=`, `>`, `>=`, evaluated with JavaScript semantics in Rust |
 | Interactivity | `$state` with primitive literals, `on<event>` handlers with any JavaScript, page script code, delegated events |
@@ -32,7 +33,6 @@ These are absent from the code. Where a page in the docs mentions one, it links 
 
 ### Authoring
 
-- **Components.** `<DataSource>` is the only component. You cannot define or import your own. Layouts wrap a folder; they are not components.
 - **Custom `<head>` content.** The document shell is fixed: no extra `<meta>`, `<link>` or favicon tags, and `lang="en"` always.
 - **Dynamic titles.** `<title>` takes literal text only.
 - **CSS scoping.** Styles are global within a page.
@@ -72,7 +72,8 @@ These are absent from the code. Where a page in the docs mentions one, it links 
 
 These work, with constraints worth knowing:
 
-- **Line-based script parsing.** Each `import { … } from "$sources";` and each `let x = $state(literal);` must be on its own line. Declarations must use `let`.
+- **Line-based script parsing.** Each `import { … } from "$sources";`, each `import Name from "$lib/….rk";`, and each `let x = $state(literal);` must be on its own line. Declarations must use `let`.
+- **Shared component state.** A component's `$state` is merged into the page once, so two uses share it. Props have no defaults and no fields. The component tag does not take event handlers. See [Components](/docs/pages-and-routes/#components).
 - **The state rewrite is not scope-aware.** A local variable or parameter with the same name as a state variable is rewritten too. Regular-expression literals are not recognised by the scanner.
 - **`&&` and `||` produce booleans** in templates, not operand values. See [Expressions](/docs/expressions/#and-return-booleans).
 - **Views must use camelCase.** They need `#[serde(rename_all = "camelCase")]` so that JSON names match what templates read.

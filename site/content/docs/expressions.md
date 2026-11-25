@@ -35,7 +35,7 @@ Rust-kit draws the line at the operations it can guarantee. In Rust they are eva
 
 Operator precedence, from tightest to loosest: `!`, then `<` `<=` `>` `>=`, then `===` `!==`, then `&&`, then `||`. Use parentheses whenever it helps readability.
 
-The names available are `$state` variables declared in the page script, the `let:` binding of an enclosing `<DataSource>` (default `data`), and the item and index of an enclosing `{#each}`. An inner binding shadows an outer one with the same name.
+The names available are `$state` variables declared in the page script, a component's props (the names its template reads), the `let:` binding of an enclosing `<DataSource>` (default `data`), and the item and index of an enclosing `{#each}`. An inner binding shadows an outer one with the same name. A prop has no fields.
 
 ```rk title=expressions.rk
 <script>

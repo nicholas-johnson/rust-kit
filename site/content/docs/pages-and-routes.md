@@ -21,6 +21,7 @@ The compiler takes the path relative to `src/routes`, drops the `.rk` extension,
 | `src/routes/docs/guides/index.rk` | `/docs/guides` |
 | `src/routes/layout.rk` | not a route; wraps every page |
 | `src/routes/blog/[slug].rk` | `/blog/{slug}` |
+| `src/lib/Header.rk` | not a route; a component imported from `$lib` |
 
 Directories nest as deeply as you like. Files are discovered in sorted order, and anything without the `.rk` extension is ignored.
 
@@ -44,11 +45,57 @@ A few details worth knowing:
 </style>
 ```
 
-`<slot />` (or an empty `<slot></slot>`) is where the page is rendered. A layout needs exactly one. It takes no attributes and no fallback content. A `<slot>` in any other file is a compile error.
+`<slot />` (or an empty `<slot></slot>`) is where the page is rendered. A layout needs exactly one. It takes no attributes and no fallback content. A `<slot>` in a page is a compile error. A component may have one `<slot />` for the tag's children; see [Components](#components).
 
 A layout may use the same template constructs as a page. Its `<style>` is concatenated ahead of the page's stylesheet, so the page's rules win. A `$state` name declared in a layout cannot be declared again in a nested layout or the page. `export const prerender = true` belongs on the page, not the layout.
 
 The document `<title>` is the page's when it has one, otherwise the nearest layout's. Layouts wrap the body. They do not add `<meta>` tags or change `lang`.
+
+## Components
+
+A page or a layout can import a shared `.rk` file and render it by its import name.
+
+```rk partial title=src/routes/index.rk
+<script>
+  import Header from "$lib/Header.rk";
+  import Card from "$lib/Card.rk";
+</script>
+
+<Header label="Notes" />
+<Card title="Today">
+  <p>Three things to do.</p>
+</Card>
+```
+
+`$lib` is the `lib` directory next to `src/routes`, so `src/lib` when routes live in `src/routes`. A relative path that ends in `.rk` resolves from the importing file: `./Badge.rk` or `../ui/Card.rk`. That is how one component imports another. Keep component files out of `src/routes`, or the compiler will also publish them as pages.
+
+The import is one line. The name starts with an uppercase letter, and that name is the tag.
+
+```rk partial title=src/lib/Card.rk
+<section class="card">
+  <h2>{title}</h2>
+  <slot />
+</section>
+
+<style>
+  .card { border: 1px solid #ccc; padding: 0.75rem; }
+</style>
+```
+
+The compiler inlines the component into the page, the same way it inlines a layout. Both renderers walk one tree. There is no component runtime.
+
+What gets merged into the page, once per component file:
+
+- `$state` declarations. Two `<Card>` tags share that state. A `$state` name cannot also be declared in the page, a layout, or another component on the same page.
+- `import { … } from "$sources"` lines. A source imported by a component counts as an import from every page and layout that uses the component. The [one-parameter rule](#one-dynamic-segment) still applies.
+- Any other script, copied into the page module.
+- `<style>`, concatenated ahead of the importing file, nested components first. Layout composition still puts the outer layout first and the page last, so the page's rules win.
+
+A prop is a name the component's template reads. Every such name is required. Pass a static string (`title="Today"`) or one expression (`title={data.title}`). There are no defaults, no bare attributes, and no mixed strings. The tag does not take event handlers: write `onclick` inside the component. A prop has no fields; pass `name={data.name}` rather than reading `user.name` where `user` is the prop.
+
+One `<slot />` receives the tag's children. Those children stay in the parent's scope, so they can read the page's state and they cannot read the component's props. A component with no slot cannot have children. Whitespace between the tags is not children.
+
+A component cannot contain `<title>`, and `export const prerender = true` belongs on the page.
 
 ## One dynamic segment
 
@@ -73,7 +120,7 @@ A resolver takes the parameter when every file that imports that source sits on 
 pub async fn post(ctx: &RequestContext<AppState>, slug: &str) -> Result<PostView, Error>
 ```
 
-The generated call is `post(ctx, params.slug.as_str())`. A source imported from a fixed path stays `fn post(ctx: &RequestContext<AppState>)`. Importing one source from both, or from two different parameter names, is a compile error. Move the import under the dynamic segment, or split the source.
+The generated call is `post(ctx, params.slug.as_str())`. A source imported from a fixed path stays `fn post(ctx: &RequestContext<AppState>)`. Importing one source from both, or from two different parameter names, is a compile error. A source imported inside a component counts as an import from every page and layout that renders that component. Move the import under the dynamic segment, or split the source.
 
 A client-loaded source that takes the parameter is fetched as `GET /_rk/source/post?slug=notes`. A missing or empty parameter is `400`. When the browser module reads `{slug}`, the handoff payload also carries `params.slug`.
 

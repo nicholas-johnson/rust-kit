@@ -145,12 +145,7 @@ async fn load(router: &Router, path: &str) -> Page {
 
     // Tests run in parallel and may load the same page; give each load its own directory.
     static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let dir = std::env::temp_dir().join(format!(
-        "rk-parity-{}-{}-{}",
-        std::process::id(),
-        SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-        path.trim_matches('/').replace('/', "_")
-    ));
+    let dir = std::env::temp_dir().join(format!("rk-parity-{}-{}-{}", std::process::id(), SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed), path.trim_matches('/').replace('/', "_")));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("runtime.mjs"), runtime).unwrap();
     std::fs::write(dir.join("stub.mjs"), STUB).unwrap();
@@ -222,6 +217,8 @@ async fn state_changes_render_what_rust_would_have_rendered() {
         ("/branches-5", json!({ "n": 0 }), "/branches-0"),
         ("/branches-2", json!({ "n": 5 }), "/branches-5"),
         ("/blog/hello", json!({ "open": true }), "/blog/hello/open"),
+        ("/ticks", json!({ "ticks": 2 }), "/ticks-2"),
+        ("/ticks-2", json!({ "ticks": 0 }), "/ticks"),
     ] {
         let page = load(&router, from).await;
         let want = ssr_blocks(&send(&router, get(reference, None)).await.body);

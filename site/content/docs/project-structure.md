@@ -17,6 +17,8 @@ my-app/
 │   ├── main.rs         server entry point (or lib.rs + main.rs)
 │   ├── sources.rs      crate::sources: data source resolvers and views
 │   ├── actions.rs      form action handlers (any module name)
+│   ├── lib/            shared components, imported as $lib/….rk
+│   │   └── Header.rk
 │   └── routes/         one .rk file per page
 │       ├── index.rk        → /
 │       ├── login.rk        → /login
@@ -79,7 +81,7 @@ Each page is a single file with up to four parts, in any order at the top level:
 </style>
 ```
 
-A `layout.rk` in a folder wraps the pages there; see [Pages and routes](/docs/pages-and-routes/#layouts). There are no shared partials or components yet, so markup you want in only some pages is still repeated. See the [roadmap](/docs/roadmap/).
+A `layout.rk` in a folder wraps the pages there; see [Pages and routes](/docs/pages-and-routes/#layouts). Shared components live in `src/lib` and are imported with `import Header from "$lib/Header.rk"`; see [Components](/docs/pages-and-routes/#components). `$lib` is the directory next to `src/routes`. It is not a route.
 
 ## `crate::AppState`
 
