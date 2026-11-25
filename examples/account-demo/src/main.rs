@@ -22,7 +22,8 @@ async fn main() {
             let listener = rustkit::dev::listener(addr).await.expect("bind");
             let local = listener.local_addr().expect("local address");
             // Imitate a 25 ms round trip to the accounts service.
-            let app = account_demo::app(Duration::from_millis(25), !local.ip().is_loopback());
+            let app = account_demo::app(Duration::from_millis(25), !local.ip().is_loopback())
+                .session_store(rustkit::SessionStore::persistent("sessions.json"));
             let router = app.into_router().await.expect("prerender failed");
             println!("listening on http://{local}");
             axum::serve(listener, router).await.unwrap();

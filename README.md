@@ -113,8 +113,11 @@ client needs to the page runtime. A plain `cargo build` leaves them out, and a
 page whose runtime lacks them falls back to a full reload.
 
 `serve` imitates a 25 ms round trip to the accounts service. Sign in at
-`/login` as Alice or Bob (demo accounts with no password). `build` writes the
-prerendered routes and assets to `dist/` and prints JavaScript and CSS bytes per route.
+`/login` as Alice or Bob (demo accounts with no password). Sessions are written
+to `sessions.json` in the working directory, so stopping the process and
+starting it again keeps the sign-in. `build` writes the prerendered routes and
+assets to `dist/` and prints JavaScript and CSS bytes per route. It does not
+touch the session file.
 
 ## How a page compiles
 
@@ -228,6 +231,30 @@ The browser half was checked by hand in Chromium:
 - Every request-time page carries a `Server-Timing` header with `sources;dur=…` and
   `render;dur=…`, which separates upstream latency from render CPU time.
 
+### Persistent sessions
+
+The cookie stays an opaque id. The user id and the CSRF token stay on the
+server. `App::new` keeps that map in memory, so a restart of a process that
+never opted in still signs everyone out. To keep the map, pass a file:
+
+```rust
+let app = account_demo::app(Duration::from_millis(25), secure)
+    .session_store(rustkit::SessionStore::persistent("sessions.json"));
+```
+
+The file is rewritten when a session is created, used, or destroyed. A new
+process that opens the same path accepts the old cookie: the visitor is still
+signed in, and a CSRF token from a page loaded before the restart still
+matches. The 12-hour idle clock is stored in the file, so a restart does not
+extend it. On Unix the file mode is `0600`.
+
+The account demo's `serve` command uses `sessions.json` in the working
+directory. `rustkit dev` keeps using `target/rustkit-dev/<package>/sessions.json`
+and ignores `session_store`, so a rebuild does not sign you out either.
+
+Two processes must not share the file. There is no lock and no shared store,
+so run one instance.
+
 ### Layouts and one route parameter
 
 `layout.rk` in a folder wraps the pages in that folder and is not itself a
@@ -326,7 +353,8 @@ A missing file, or a file that does not set the key, leaves scoping on.
   `$state`. Props have no defaults and no fields. The tag takes no event
   handlers. See [Components](#components) above.
 - **Not built yet**: rest parameters (`[...slug]`), optional
-  segments (`[[slug]]`), more than one `[param]` per route, content
-  collections, and persistent session storage.
+  segments (`[[slug]]`), more than one `[param]` per route, and content
+  collections. A session file is one process; a store shared by several
+  instances is not built.
 - **Views**: they must serialize with `#[serde(rename_all = "camelCase")]` so
   that their JSON names match what templates read.

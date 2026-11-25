@@ -30,7 +30,7 @@ cargo run -p account-demo -- serve 127.0.0.1:3000
 |---|---|---|
 | `addr` | `127.0.0.1:3000` | The socket address to listen on. |
 
-`serve` is also what runs when you pass no arguments. It imitates a 25 ms round trip on every call to the in-memory accounts service, so the `Server-Timing` header shows realistic `sources` times. It turns `Secure` cookies off only when the address starts with `127.0.0.1`. On any other address, such as `0.0.0.0:3000` or a LAN address, the session cookie is marked `Secure`. Browsers refuse `Secure` cookies over plain HTTP (some make an exception for `localhost`, not all), so signing in appears not to work. See [Troubleshooting](/docs/troubleshooting/#signing-in-does-nothing-on-plain-http).
+`serve` is also what runs when you pass no arguments. It writes sessions to `sessions.json` in the working directory, so a restart keeps the sign-in. Under `rustkit dev` that file is ignored and sessions live in `target/rustkit-dev/account-demo/sessions.json` instead. It imitates a 25 ms round trip on every call to the in-memory accounts service, so the `Server-Timing` header shows realistic `sources` times. It turns `Secure` cookies off only when the address starts with `127.0.0.1`. On any other address, such as `0.0.0.0:3000` or a LAN address, the session cookie is marked `Secure`. Browsers refuse `Secure` cookies over plain HTTP (some make an exception for `localhost`, not all), so signing in appears not to work. See [Troubleshooting](/docs/troubleshooting/#signing-in-does-nothing-on-plain-http).
 
 Sign in at `/login` as Alice or Bob. The demo accounts have no password.
 

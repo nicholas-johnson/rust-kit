@@ -23,6 +23,7 @@ Everything below is exported from the crate root unless it says `rustkit::js`.
 | `new` | `fn new(manifest: Manifest<S>, state: S) -> Self` | Creates the app with an empty in-memory session store, `Secure` cookies on, and `/login` as the login path. |
 | `secure_cookies` | `fn secure_cookies(self, on: bool) -> Self` | Whether the session cookie carries `Secure`. Default `true`. Turn it off only for plain-HTTP local development. |
 | `login_path` | `fn login_path(self, path: impl Into<String>) -> Self` | Where to send a visitor when something returns `Error::Unauthorized`. Default `/login`. |
+| `session_store` | `fn session_store(self, store: SessionStore) -> Self` | Replaces the in-memory store. Under `rustkit dev`, the dev session file is left in place. |
 | `action` | `fn action<F, Fut>(self, path: &str, f: F) -> Self` | Registers a `POST` form action. `F: Fn(RequestContext<S>, Form) -> Fut`, `Fut: Future<Output = Result<Redirect, Error>> + Send`. |
 | `routes` | `fn routes(&self) -> &[Route<S>]` | The compiled routes, for reporting or tests. |
 | `state` | `fn state(&self) -> Arc<S>` | A handle on the shared state, for example to read counters in tests. |
@@ -198,12 +199,13 @@ Wraps a rendered body in the HTML document: doctype, `lang="en"`, charset and vi
 
 ```rust
 #[derive(Clone)]
-pub struct SessionStore { /* in-memory map */ }
+pub struct SessionStore { /* map, optionally backed by a file */ }
 
-impl Default for SessionStore { /* 12 hour idle timeout */ }
+impl Default for SessionStore { /* 12 hour idle timeout, in memory */ }
 
 impl SessionStore {
     pub fn new(idle_timeout: Duration) -> Self;
+    pub fn persistent(path: impl Into<PathBuf>) -> Self;
     pub fn load(&self, id: &str) -> Option<SessionData>;
     pub fn create(&self, user_id: Option<String>) -> (String, SessionData);
     pub fn destroy(&self, id: &str);
@@ -213,7 +215,7 @@ pub fn random_token() -> String;
 pub fn constant_time_eq(a: &str, b: &str) -> bool;
 ```
 
-`SessionStore` is the in-memory store `App` uses. `load` refreshes the idle timer and drops a session that has expired. `App` always creates its own default store; there is no method to pass one in, so the idle timeout is fixed at 12 hours for now. Sessions live in process memory and are lost on restart. See [Sessions](/docs/sessions/).
+`SessionStore` is the map `App` uses. `load` refreshes the idle timer and drops a session that has expired. `new` keeps the map in memory. `persistent` loads a JSON file and writes it back when a session is created, used, or destroyed, so a new process that opens the same path keeps the session. Pass it with `App::session_store`. `persistent` uses the 12-hour timeout. One process only: do not point two processes at the file. See [Sessions](/docs/sessions/).
 
 `random_token` returns 256 bits from the operating system's random source as 64 hex characters. Session ids and CSRF tokens use it. `constant_time_eq` compares two strings without stopping at the first difference (it does return early when the lengths differ). Use it whenever you compare a secret.
 

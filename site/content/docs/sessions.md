@@ -1,6 +1,6 @@
 ---
 title: Sessions
-description: The opaque rk_session cookie, the in-memory session store, signing users in and out, and how reading the session changes caching.
+description: The opaque rk_session cookie, the session store, signing users in and out, and how reading the session changes caching.
 section: Server
 order: 2
 ---
@@ -29,16 +29,29 @@ There is no `Max-Age` or `Expires`, so it is a browser-session cookie. How long 
 
 ## The session store
 
-Sessions are kept in an in-memory `SessionStore`: a map from session id to the user id, the CSRF token and the time the session was last used.
+`SessionStore` is a map from session id to the user id, the CSRF token and the time the session was last used.
 
 - **Idle timeout.** A session expires after 12 hours without a request that loads it. Each request that finds the session resets the clock.
 - **Expiry is lazy.** An expired session is removed when someone presents its id, not on a timer.
-- **One process.** The store lives in memory. Restarting the server signs everyone out, and two server processes do not share sessions.
+- **One process.** Two server processes do not share sessions. There is no lock and no shared store.
 
-`App` always uses the default store with the 12-hour timeout. `SessionStore::new(idle_timeout)` exists, but there is no `App` method to install your own store yet.
+`App::new` uses an in-memory store with the 12-hour timeout, so a restart of that process signs everyone out. To keep sessions, install a file store:
+
+```rust
+let app = rustkit::App::new(generated::manifest(), state)
+    .session_store(rustkit::SessionStore::persistent("/var/lib/members/sessions.json"));
+```
+
+`SessionStore::persistent` loads the file at startup and rewrites it when a session is created, used, or destroyed. The write goes to a temporary file in the same directory, is flushed, and then replaces the real file. On Unix the file mode is `0600`. A missing file starts empty.
+
+The JSON is a map from session id to `user_id` (a string, or `null` for an anonymous session), `csrf`, and `last_seen_ms` (Unix time in milliseconds). A restart does not move the idle clock. Presenting an id that has already been idle for 12 hours fails, and that id is then removed from the file. A file written before `last_seen_ms` existed is treated as used at startup.
+
+The account demo's `serve` command stores sessions in `sessions.json` in the working directory. `rustkit dev` uses `target/rustkit-dev/<package>/sessions.json` instead, and ignores `session_store`, so a rebuild keeps the dev session.
+
+`SessionStore::new(idle_timeout)` builds an in-memory store with a different timeout. `persistent` always uses 12 hours. The cookie name stays `rk_session`.
 
 > [!IMPORTANT]
-> Because sessions are in memory, v0.1 suits a single server process. Running several instances behind a load balancer needs sticky sessions, and even then a deploy signs everyone out. Persistent session storage is on the [roadmap](/docs/roadmap/).
+> Point one process at the file. A second process writing the same path can overwrite the first process's sessions. Run a single instance. A store that several instances share is on the [roadmap](/docs/roadmap/).
 
 ## Who is signed in
 
@@ -116,7 +129,7 @@ vary: Cookie
 set-cookie: rk_session=…; Path=/; HttpOnly; SameSite=Lax; Secure
 ```
 
-Each anonymous session takes a small amount of memory until it idles out. See [Security](/docs/security/#what-is-not-covered) for what that means for abuse.
+Each anonymous session takes a small amount of memory, and a record in the session file when you use one, until it idles out. See [Security](/docs/security/#what-is-not-covered) for what that means for abuse.
 
 ## Secure cookies in development
 
@@ -155,8 +168,8 @@ This is automatic. You cannot forget to mark a page private, because the same ca
 ## Not available yet
 
 - Storing your own values in the session. `SessionData` holds only the user id and CSRF token.
-- Configuring the cookie name, domain, lifetime or idle timeout through `App`.
-- A persistent or shared store.
+- Configuring the cookie name, domain, lifetime or idle timeout through `App`. `persistent` uses the 12-hour timeout.
+- A store shared by more than one process.
 - Signing out all of a user's sessions.
 
 See the [roadmap](/docs/roadmap/).

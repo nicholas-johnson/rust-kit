@@ -374,7 +374,7 @@ Also note that if an *action* returns `Unauthorized` (say, `require_user` inside
 - **Authorization lives in the resolver.** The page didn't need an "is signed in" check, and there's no second place to forget one.
 
 > [!IMPORTANT]
-> Sessions live in memory in the server process. Restarting the server signs everyone out, and two copies of the server don't share sessions. Persistent session storage isn't available yet. [Deploying](/tutorials/deploying/) covers what that means in production.
+> This app uses the default in-memory store, so restarting the server signs everyone out. To keep the sign-in, pass `SessionStore::persistent(path)` to `App::session_store`. The cookie, the user id and the CSRF token then survive a restart. Two processes still must not share that file. [Sessions](/docs/sessions/) and [Deploying](/tutorials/deploying/) cover it.
 
 ## Next steps
 
