@@ -13,11 +13,36 @@ pub enum Load {
 #[derive(Debug, Clone)]
 pub enum Node {
     Text(String),
-    Expr { id: usize, expr: Expr },
+    Expr {
+        id: usize,
+        expr: Expr,
+    },
     Element(Element),
-    If { id: usize, branches: Vec<(Expr, Vec<Node>)>, els: Option<Vec<Node>> },
-    Each { id: usize, expr: Expr, item: String, index: Option<String>, body: Vec<Node>, pos: usize },
-    Source { id: usize, source: String, load: Load, bind: String, body: Vec<Node>, pos: usize },
+    If {
+        id: usize,
+        branches: Vec<(Expr, Vec<Node>)>,
+        els: Option<Vec<Node>>,
+    },
+    Each {
+        id: usize,
+        expr: Expr,
+        item: String,
+        index: Option<String>,
+        body: Vec<Node>,
+        pos: usize,
+    },
+    Source {
+        id: usize,
+        source: String,
+        load: Load,
+        bind: String,
+        body: Vec<Node>,
+        pos: usize,
+    },
+    /// `<slot>` in a `layout.rk`. Replaced with the wrapped page when routes are composed.
+    Slot {
+        pos: usize,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -42,7 +67,10 @@ pub enum AttrValue {
     Static(String),
     Parts(Vec<Part>),
     /// `on<event>={…}`: arbitrary JavaScript evaluating to a function.
-    Handler { js: String, pos: usize },
+    Handler {
+        js: String,
+        pos: usize,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -51,7 +79,7 @@ pub enum Part {
     Expr(Expr),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct PageFile {
     pub script: Option<(String, usize)>,
     pub module_script: Option<(String, usize)>,
@@ -60,8 +88,7 @@ pub struct PageFile {
     pub nodes: Vec<Node>,
 }
 
-const VOID: [&str; 13] =
-    ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"];
+const VOID: [&str; 13] = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"];
 
 enum Stop {
     Eof,
@@ -80,11 +107,19 @@ struct Parser<'a> {
 }
 
 pub fn parse(src: &str) -> Result<PageFile, Diag> {
-    let mut p = Parser { src, i: 0, next_id: 0, depth: 0, page: PageFile::default() };
+    let mut p = Parser {
+        src,
+        i: 0,
+        next_id: 0,
+        depth: 0,
+        page: PageFile::default(),
+    };
     let (nodes, stop) = p.nodes()?;
     match stop {
         Stop::Eof => {}
-        Stop::Close(tag, pos) => return Err(Diag::new(pos, format!("unexpected closing tag `</{tag}>`"))),
+        Stop::Close(tag, pos) => {
+            return Err(Diag::new(pos, format!("unexpected closing tag `</{tag}>`")));
+        }
         Stop::Else(_, pos) => return Err(Diag::new(pos, "`{:else}` outside `{#if}`")),
         Stop::EndIf(pos) => return Err(Diag::new(pos, "`{/if}` without `{#if}`")),
         Stop::EndEach(pos) => return Err(Diag::new(pos, "`{/each}` without `{#each}`")),
@@ -99,12 +134,7 @@ fn hoist_title(nodes: Vec<Node>, title: &mut Option<String>) -> Vec<Node> {
         .into_iter()
         .filter(|n| match n {
             Node::Element(e) if e.tag == "title" => {
-                *title = Some(
-                    e.children
-                        .iter()
-                        .filter_map(|c| if let Node::Text(t) = c { Some(t.as_str()) } else { None })
-                        .collect(),
-                );
+                *title = Some(e.children.iter().filter_map(|c| if let Node::Text(t) = c { Some(t.as_str()) } else { None }).collect());
                 false
             }
             _ => true,
@@ -168,7 +198,10 @@ impl<'a> Parser<'a> {
                     return Err(Diag::new(pos, format!("unknown block `{{{t}}}`")));
                 } else {
                     let id = self.id();
-                    nodes.push(Node::Expr { id, expr: expr::parse(&inner, inner_pos)? });
+                    nodes.push(Node::Expr {
+                        id,
+                        expr: expr::parse(&inner, inner_pos)?,
+                    });
                 }
             } else {
                 let end = r.find(['<', '{']).unwrap_or(r.len());
@@ -244,9 +277,7 @@ impl<'a> Parser<'a> {
 
     fn each_block(&mut self, spec: &str, spec_pos: usize, pos: usize) -> Result<Node, Diag> {
         let id = self.id();
-        let (list, binding) = spec
-            .rsplit_once(" as ")
-            .ok_or_else(|| Diag::new(spec_pos, "expected `{#each list as item}`"))?;
+        let (list, binding) = spec.rsplit_once(" as ").ok_or_else(|| Diag::new(spec_pos, "expected `{#each list as item}`"))?;
         let expr = expr::parse(list, spec_pos)?;
         let mut names = binding.split(',').map(|s| s.trim().to_owned());
         let item = names.next().filter(|s| is_ident(s)).ok_or_else(|| Diag::new(spec_pos, "invalid item name"))?;
@@ -299,9 +330,7 @@ impl<'a> Parser<'a> {
             if self.depth > 0 {
                 return Err(Diag::new(pos, format!("`<{tag}>` must be at the top level of a page")));
             }
-            let module = attrs.iter().any(|a| {
-                a.name == "context" && matches!(&a.value, AttrValue::Static(v) if v == "module")
-            });
+            let module = attrs.iter().any(|a| a.name == "context" && matches!(&a.value, AttrValue::Static(v) if v == "module"));
             let slot = match (tag.as_str(), module) {
                 ("style", _) => {
                     self.page.style = Some(body);
@@ -333,6 +362,15 @@ impl<'a> Parser<'a> {
             }
         };
 
+        if tag == "slot" {
+            if !attrs.is_empty() {
+                return Err(Diag::new(pos, "`<slot>` takes no attributes"));
+            }
+            if !children.is_empty() {
+                return Err(Diag::new(pos, "`<slot>` cannot wrap content").help("the layout's `<slot>` is where the page is rendered"));
+            }
+            return Ok(Some(Node::Slot { pos }));
+        }
         if tag.starts_with(|c: char| c.is_ascii_uppercase()) {
             return self.component(tag, attrs, children, pos).map(Some);
         }
@@ -351,7 +389,9 @@ impl<'a> Parser<'a> {
             match (a.name.as_str(), a.value) {
                 ("source", AttrValue::Parts(p)) => match p.as_slice() {
                     [Part::Expr(Expr::Path { root, segs, .. })] if segs.is_empty() => source = Some(root.clone()),
-                    _ => return Err(Diag::new(pos, "`source` must name an import from \"$sources\"")),
+                    _ => {
+                        return Err(Diag::new(pos, "`source` must name an import from \"$sources\""));
+                    }
                 },
                 ("load", AttrValue::Static(v)) => {
                     load = Some(match v.as_str() {
@@ -361,7 +401,9 @@ impl<'a> Parser<'a> {
                     })
                 }
                 (n, AttrValue::Bare) if n.starts_with("let:") => bind = n[4..].to_owned(),
-                (n, _) => return Err(Diag::new(pos, format!("unexpected attribute `{n}` on <DataSource>"))),
+                (n, _) => {
+                    return Err(Diag::new(pos, format!("unexpected attribute `{n}` on <DataSource>")));
+                }
             }
         }
         let source = source.ok_or_else(|| Diag::new(pos, "<DataSource> needs `source={…}`"))?;
@@ -441,6 +483,5 @@ fn split_parts(raw: &str, base: usize) -> Result<Vec<Part>, Diag> {
 
 pub fn is_ident(s: &str) -> bool {
     let mut c = s.chars();
-    c.next().is_some_and(|f| f.is_ascii_alphabetic() || f == '_' || f == '$')
-        && c.all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '$')
+    c.next().is_some_and(|f| f.is_ascii_alphabetic() || f == '_' || f == '$') && c.all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '$')
 }

@@ -79,11 +79,11 @@ Each page is a single file with up to four parts, in any order at the top level:
 </style>
 ```
 
-There are no layouts or shared partials yet, so shared markup (navigation, footers) is repeated in each page. See the [roadmap](/docs/roadmap/).
+A `layout.rk` in a folder wraps the pages there; see [Pages and routes](/docs/pages-and-routes/#layouts). There are no shared partials or components yet, so markup you want in only some pages is still repeated. See the [roadmap](/docs/roadmap/).
 
 ## `crate::AppState`
 
-The generated renderers are typed as `fn render(ctx: &RequestContext<crate::AppState>)`. `AppState` is your type, holding whatever your pages and actions need: service clients, connection pools, configuration.
+The generated renderers are typed as `fn render(ctx: &RequestContext<crate::AppState>, param: Option<&str>)`. `AppState` is your type, holding whatever your pages and actions need: service clients, connection pools, configuration. `param` is the route's single dynamic segment, or `None` on a fixed path.
 
 ```rust
 pub struct AppState {

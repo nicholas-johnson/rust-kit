@@ -19,6 +19,8 @@ enum Binding {
     ServerSource(String),
     ClientSource(String),
     Loop,
+    /// The route's `[param]`, a string in scope for the whole composed page.
+    Param,
 }
 
 type Scope = Vec<(String, Binding)>;
@@ -62,17 +64,39 @@ struct Gen<'a> {
     projections: BTreeMap<String, Projection>,
     csrf_in_js: bool,
     tmp: usize,
+    /// The route's single `[param]`, if it has one.
+    param: Option<&'a str>,
+    /// Sources called as `source(ctx, params.<param>.as_str())`.
+    param_sources: &'a BTreeSet<String>,
+    /// A browser block or handler reads the route parameter.
+    param_in_js: bool,
 }
 
 pub fn generate(page: &PageFile, opts: &Options) -> Result<PageOutput, Diag> {
+    let none = BTreeSet::new();
+    generate_routed(page, opts, None, &none)
+}
+
+/// `param` is the route's `[name]` segment. `param_sources` are resolvers
+/// called with that parameter as `&str`.
+pub(crate) fn generate_routed(page: &PageFile, opts: &Options, param: Option<&str>, param_sources: &BTreeSet<String>) -> Result<PageOutput, Diag> {
     let script = match &page.script {
         Some((src, pos)) => script::parse(src, *pos)?,
-        None => Script { sources: vec![], state: vec![], rest: String::new() },
+        None => Script {
+            sources: vec![],
+            state: vec![],
+            rest: String::new(),
+        },
     };
-    let prerender = page
-        .module_script
-        .as_ref()
-        .is_some_and(|(s, _)| s.contains("export const prerender = true"));
+    if let Some(name) = param {
+        if let Some((src, base)) = &page.script {
+            if script.state.iter().any(|(n, _)| n == name) {
+                let at = src.find(&format!("let {name}")).map_or(*base, |i| base + i);
+                return Err(Diag::new(at, format!("`{name}` is the route parameter, so it cannot also be `$state`")));
+            }
+        }
+    }
+    let prerender = page.module_script.as_ref().is_some_and(|(s, _)| s.contains("export const prerender = true"));
 
     let mut g = Gen {
         opts,
@@ -88,10 +112,17 @@ pub fn generate(page: &PageFile, opts: &Options) -> Result<PageOutput, Diag> {
         projections: BTreeMap::new(),
         csrf_in_js: false,
         tmp: 0,
+        param,
+        param_sources,
+        param_in_js: false,
     };
 
+    let mut scope = Vec::new();
+    if let Some(name) = param {
+        scope.push((name.to_owned(), Binding::Param));
+    }
     let mut body = String::new();
-    g.rs_nodes(&page.nodes, &Vec::new(), &mut body)?;
+    g.rs_nodes(&page.nodes, &scope, &mut body)?;
 
     let state_names: Vec<String> = g.state.iter().map(|(n, _)| n.clone()).collect();
     let user_js = script::rewrite_state(&script.rest, &state_names);
@@ -114,6 +145,12 @@ fn lookup<'s>(scope: &'s Scope, name: &str) -> Option<&'s Binding> {
     scope.iter().rev().find(|(n, _)| n == name).map(|(_, b)| b)
 }
 
+/// A parameter or field name that is a Rust keyword, written so it parses.
+fn raw_ident(name: &str) -> String {
+    const KW: [&str; 12] = ["type", "match", "move", "ref", "self", "struct", "use", "fn", "impl", "loop", "mod", "where"];
+    if KW.contains(&name) { format!("r#{name}") } else { name.to_owned() }
+}
+
 fn snake(s: &str) -> String {
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {
@@ -126,8 +163,7 @@ fn snake(s: &str) -> String {
             out.push(c);
         }
     }
-    const KW: [&str; 12] = ["type", "match", "move", "ref", "self", "struct", "use", "fn", "impl", "loop", "mod", "where"];
-    if KW.contains(&out.as_str()) { format!("r#{out}") } else { out }
+    raw_ident(&out)
 }
 
 /// A JavaScript string literal.
@@ -179,10 +215,7 @@ fn rs_str(s: &str) -> String {
 }
 
 fn is_post_form(e: &Element) -> bool {
-    e.tag == "form"
-        && e.attrs.iter().any(|a| {
-            a.name == "method" && matches!(&a.value, AttrValue::Static(v) if v.eq_ignore_ascii_case("post"))
-        })
+    e.tag == "form" && e.attrs.iter().any(|a| a.name == "method" && matches!(&a.value, AttrValue::Static(v) if v.eq_ignore_ascii_case("post")))
 }
 
 fn static_attr(name: &str, raw: &str) -> String {
@@ -199,8 +232,7 @@ impl Gen<'_> {
     }
 
     fn state_deps(&self, exprs: &[&Expr], scope: &Scope) -> Vec<String> {
-        let mut deps: Vec<String> =
-            exprs.iter().flat_map(|e| e.roots()).filter(|r| self.is_state(r, scope)).collect();
+        let mut deps: Vec<String> = exprs.iter().flat_map(|e| e.roots()).filter(|r| self.is_state(r, scope)).collect();
         deps.sort();
         deps.dedup();
         deps
@@ -216,10 +248,7 @@ impl Gen<'_> {
                 .attrs
                 .iter()
                 .flat_map(|a| match &a.value {
-                    AttrValue::Parts(p) => p
-                        .iter()
-                        .filter_map(|p| if let Part::Expr(e) = p { Some(e) } else { None })
-                        .collect(),
+                    AttrValue::Parts(p) => p.iter().filter_map(|p| if let Part::Expr(e) = p { Some(e) } else { None }).collect(),
                     _ => vec![],
                 })
                 .collect(),
@@ -230,7 +259,7 @@ impl Gen<'_> {
     fn is_dynamic(&self, node: &Node, scope: &Scope) -> bool {
         match node {
             Node::Source { load: Load::Client, .. } => true,
-            Node::Source { .. } | Node::Text(_) => false,
+            Node::Slot { .. } | Node::Source { .. } | Node::Text(_) => false,
             n => Self::own_exprs(n).iter().any(|e| self.uses_state(e, scope)),
         }
     }
@@ -239,7 +268,7 @@ impl Gen<'_> {
         match node {
             Node::Expr { id, .. } | Node::If { id, .. } | Node::Each { id, .. } | Node::Source { id, .. } => *id,
             Node::Element(e) => e.id,
-            Node::Text(_) => unreachable!(),
+            Node::Text(_) | Node::Slot { .. } => unreachable!(),
         }
     }
 
@@ -247,14 +276,22 @@ impl Gen<'_> {
         if self.imported.iter().any(|s| s == name) {
             Ok(())
         } else {
-            Err(Diag::new(pos, format!("`{name}` is not imported from \"$sources\""))
-                .help(format!("add `import {{ {name} }} from \"$sources\";` to the page script")))
+            Err(Diag::new(pos, format!("`{name}` is not imported from \"$sources\"")).help(format!("add `import {{ {name} }} from \"$sources\";` to the page script")))
         }
     }
 
     fn unknown(&self, name: &str, pos: usize) -> Diag {
-        Diag::new(pos, format!("`{name}` is not defined here"))
-            .help("template expressions can read `$state` variables, a `<DataSource let:…>` binding, or an `{#each}` item")
+        Diag::new(pos, format!("`{name}` is not defined here")).help("template expressions can read `$state` variables, a `<DataSource let:…>` binding, an `{#each}` item, or the route's `[param]`")
+    }
+
+    fn source_call(&self, name: &str) -> String {
+        let sm = self.opts.sources_module;
+        if self.param_sources.contains(name) {
+            let ident = raw_ident(self.param.expect("parameter source on a fixed route"));
+            format!("{sm}::{name}(ctx, params.{ident}.as_str())")
+        } else {
+            format!("{sm}::{name}(ctx)")
+        }
     }
 
     // ---------------------------------------------------------------- Rust
@@ -288,23 +325,28 @@ impl Gen<'_> {
                     }
                     return self.rs_val(lit, scope);
                 }
-                if lookup(scope, root).is_none() {
-                    return Err(self.unknown(root, *pos));
-                }
                 let (segs, length) = match segs.split_last() {
                     Some((last, init)) if last == "length" => (init, true),
                     _ => (segs.as_slice(), false),
                 };
-                let mut path = format!("v_{root}");
-                for s in segs {
-                    path.push('.');
-                    path.push_str(&snake(s));
-                }
-                if length {
-                    format!("{J}::length(&{path})")
-                } else {
-                    format!("{J}::ToJs::to_js(&{path})")
-                }
+                let path = match lookup(scope, root) {
+                    Some(Binding::Param) => {
+                        if !segs.is_empty() {
+                            return Err(Diag::new(*pos, "a route parameter is a string and has no fields"));
+                        }
+                        format!("params.{}", raw_ident(root))
+                    }
+                    Some(_) => {
+                        let mut path = format!("v_{root}");
+                        for s in segs {
+                            path.push('.');
+                            path.push_str(&snake(s));
+                        }
+                        path
+                    }
+                    None => return Err(self.unknown(root, *pos)),
+                };
+                if length { format!("{J}::length(&{path})") } else { format!("{J}::ToJs::to_js(&{path})") }
             }
         })
     }
@@ -321,6 +363,9 @@ impl Gen<'_> {
             let _ = writeln!(out, "out.push_str({});", rs_str(t));
             return Ok(());
         }
+        if let Node::Slot { pos } = node {
+            return Err(Diag::new(*pos, "`<slot>` is only valid in `layout.rk`"));
+        }
         if !self.is_dynamic(node, scope) {
             return self.rs_inner(node, scope, out);
         }
@@ -335,7 +380,7 @@ impl Gen<'_> {
     /// Renders a node's initial HTML, ignoring whether the node itself is a block.
     fn rs_inner(&mut self, node: &Node, scope: &Scope, out: &mut String) -> Result<(), Diag> {
         match node {
-            Node::Text(_) => unreachable!(),
+            Node::Text(_) | Node::Slot { .. } => unreachable!(),
             Node::Expr { expr, .. } => {
                 let _ = writeln!(out, "::rustkit::js::text(&mut out, &{});", self.rs_val(expr, scope)?);
             }
@@ -358,8 +403,7 @@ impl Gen<'_> {
                 };
                 if lookup(scope, root).is_none() {
                     return Err(if self.is_state(root, scope) {
-                        Diag::new(*ppos, "`{#each}` over `$state` is not supported yet")
-                            .help("state is limited to primitive literals in the first release; iterate over a source field instead")
+                        Diag::new(*ppos, "`{#each}` over `$state` is not supported yet").help("state is limited to primitive literals in the first release; iterate over a source field instead")
                     } else {
                         self.unknown(root, *ppos)
                     });
@@ -379,7 +423,14 @@ impl Gen<'_> {
                 self.rs_nodes(body, &inner, out)?;
                 out.push_str("}\n");
             }
-            Node::Source { source, load: Load::Server, bind, body, pos, .. } => {
+            Node::Source {
+                source,
+                load: Load::Server,
+                bind,
+                body,
+                pos,
+                ..
+            } => {
                 self.check_source(source, *pos)?;
                 if !self.server_sources.contains(source) {
                     self.server_sources.push(source.clone());
@@ -470,7 +521,7 @@ impl Gen<'_> {
         };
         for node in nodes {
             match node {
-                Node::Text(_) => {}
+                Node::Text(_) | Node::Slot { .. } => {}
                 Node::Expr { expr, .. } => push_expr(expr, bound, out),
                 Node::Element(e) => {
                     for a in &e.attrs {
@@ -542,6 +593,13 @@ impl Gen<'_> {
                         entries.push(entry);
                     }
                 }
+                Some(Binding::Param) => {
+                    self.param_in_js = true;
+                    let entry = format!("{root}: P.params[{}]", js_str(&root));
+                    if !entries.contains(&entry) {
+                        entries.push(entry);
+                    }
+                }
                 Some(Binding::Loop) => {
                     return Err(Diag::new(pos, format!("`{root}` comes from a server-rendered `{{#each}}`, so the browser cannot see it here"))
                         .help("make the loop itself depend on state or load its source with `load=\"client\"`, or move this interaction outside the loop"));
@@ -560,11 +618,7 @@ impl Gen<'_> {
     }
 
     fn ssr_scope_handler(&mut self, key: &str, js: &str, pos: usize, scope: &Scope) -> Result<(), Diag> {
-        let refs = script::idents(js)
-            .into_iter()
-            .filter(|u| !u.is_property)
-            .map(|u| (u.name, u.field, pos))
-            .collect();
+        let refs = script::idents(js).into_iter().filter(|u| !u.is_property).map(|u| (u.name, u.field, pos)).collect();
         self.handoff(key, refs, scope)
     }
 
@@ -612,7 +666,11 @@ impl Gen<'_> {
                 names.push(n);
             }
         }
-        if names.is_empty() { String::new() } else { format!("const {{ {} }} = {cvar}; ", names.join(", ")) }
+        if names.is_empty() {
+            String::new()
+        } else {
+            format!("const {{ {} }} = {cvar}; ", names.join(", "))
+        }
     }
 
     /// Registers the browser render function for a block and returns its key.
@@ -624,7 +682,14 @@ impl Gen<'_> {
         self.blocks.insert(key.clone(), String::new());
         let mut body = String::new();
         let entry = match node {
-            Node::Source { source, load: Load::Client, bind, body: children, pos, .. } => {
+            Node::Source {
+                source,
+                load: Load::Client,
+                bind,
+                body: children,
+                pos,
+                ..
+            } => {
                 self.check_source(source, *pos)?;
                 self.client_sources.insert(source.clone());
                 let mut inner = scope.clone();
@@ -677,6 +742,9 @@ impl Gen<'_> {
             let _ = writeln!(out, "h += {};", js_str(t));
             return Ok(());
         }
+        if let Node::Slot { pos } = node {
+            return Err(Diag::new(*pos, "`<slot>` is only valid in `layout.rk`"));
+        }
         if let Node::Source { load: Load::Server, pos, .. } = node {
             return Err(Diag::new(*pos, "a `load=\"server\"` source cannot appear inside a region the browser renders")
                 .help("this region depends on browser state, so it may first appear after the HTTP response; use `load=\"client\"` here"));
@@ -691,7 +759,7 @@ impl Gen<'_> {
 
     fn js_inner(&mut self, node: &Node, scope: &Scope, cvar: &str, out: &mut String) -> Result<(), Diag> {
         match node {
-            Node::Text(_) | Node::Source { .. } => unreachable!(),
+            Node::Text(_) | Node::Source { .. } | Node::Slot { .. } => unreachable!(),
             Node::Expr { expr, .. } => {
                 let _ = writeln!(out, "h += r.esc({});", self.js_val(expr, scope)?);
             }
@@ -785,29 +853,33 @@ impl Gen<'_> {
 
     fn rust_module(&self, body: &str, needs_js: bool, title: &str) -> String {
         let st = self.opts.state_type;
-        let sm = self.opts.sources_module;
         let mut out = String::new();
+        if let Some(name) = self.param {
+            let ident = raw_ident(name);
+            let _ = writeln!(out, "pub struct Params {{\n    pub {ident}: ::std::string::String,\n}}\n");
+        }
         let _ = writeln!(
             out,
-            "pub async fn render(ctx: &::rustkit::RequestContext<{st}>) -> ::std::result::Result<::rustkit::Page, ::rustkit::Error> {{"
+            "pub async fn render(ctx: &::rustkit::RequestContext<{st}>, __param: Option<&str>) -> ::std::result::Result<::rustkit::Page, ::rustkit::Error> {{"
         );
+        if let Some(name) = self.param {
+            let ident = raw_ident(name);
+            let _ = writeln!(out, "let params = Params {{ {ident}: __param.expect(\"route param\").to_owned() }};");
+        }
         out.push_str("let __t0 = ::std::time::Instant::now();\n");
         if !self.server_sources.is_empty() {
             let names: Vec<String> = self.server_sources.iter().map(|s| format!("src_{s}")).collect();
-            let calls: Vec<String> = self.server_sources.iter().map(|s| format!("{sm}::{s}(ctx)")).collect();
+            let calls: Vec<String> = self.server_sources.iter().map(|s| self.source_call(s)).collect();
             // Independent reads start together; each source is read once per request.
-            let _ = writeln!(
-                out,
-                "let ({},) = ::rustkit::__private::try_join!({})?;",
-                names.join(", "),
-                calls.join(", ")
-            );
+            let _ = writeln!(out, "let ({},) = ::rustkit::__private::try_join!({})?;", names.join(", "), calls.join(", "));
         }
         out.push_str("let __sources_time = __t0.elapsed();\nlet __t1 = ::std::time::Instant::now();\n");
         out.push_str("let mut out = ::std::string::String::with_capacity(4096);\n");
         out.push_str(&coalesce(body, "out.push_str(\"", "\");"));
 
-        if needs_js && (!self.projections.is_empty() || self.csrf_in_js) {
+        let client_param = self.param.is_some() && self.client_sources.iter().any(|s| self.param_sources.contains(s));
+        let param_payload = self.param.is_some() && (self.param_in_js || client_param);
+        if needs_js && (!self.projections.is_empty() || self.csrf_in_js || param_payload) {
             out.push_str("let __payload = {\nuse ::rustkit::__private::serde_json::{Map, Value, to_value};\nlet mut s = Map::new();\n");
             for (src, proj) in &self.projections {
                 match proj {
@@ -828,19 +900,24 @@ impl Gen<'_> {
             if self.csrf_in_js {
                 out.push_str("p.insert(\"csrf\".into(), Value::String(ctx.csrf_token()));\n");
             }
+            if param_payload {
+                let name = self.param.unwrap();
+                let ident = raw_ident(name);
+                let _ = writeln!(
+                    out,
+                    "p.insert(\"params\".into(), {{ let mut m = Map::new(); m.insert({}.into(), Value::String(params.{ident}.clone())); Value::Object(m) }});",
+                    rs_str(name)
+                );
+            }
             out.push_str("Some(::rustkit::js::html_safe_json(&Value::Object(p)))\n};\n");
         } else {
             out.push_str("let __payload: Option<String> = None;\n");
         }
-        let _ = writeln!(
-            out,
-            "let html = ::rustkit::document({}, CSS, &out, __payload.as_deref(), JS);",
-            rs_str(title)
-        );
+        let _ = writeln!(out, "let html = ::rustkit::document({}, CSS, &out, __payload.as_deref(), JS);", rs_str(title));
         out.push_str("Ok(::rustkit::Page { html, sources_time: __sources_time, render_time: __t1.elapsed() })\n}\n");
         let _ = writeln!(
             out,
-            "pub fn render_boxed<'a>(ctx: &'a ::rustkit::RequestContext<{st}>) -> ::rustkit::BoxFut<'a, ::std::result::Result<::rustkit::Page, ::rustkit::Error>> {{ Box::pin(render(ctx)) }}"
+            "pub fn render_boxed<'a>(ctx: &'a ::rustkit::RequestContext<{st}>, __param: Option<&'a str>) -> ::rustkit::BoxFut<'a, ::std::result::Result<::rustkit::Page, ::rustkit::Error>> {{ Box::pin(render(ctx, __param)) }}"
         );
         out
     }
@@ -848,11 +925,7 @@ impl Gen<'_> {
     fn js_module(&self, user_js: &str) -> String {
         let mut out = String::new();
         out.push_str("import { state, start } from \"./__RUNTIME__\";\n");
-        let init: Vec<String> = self
-            .state
-            .iter()
-            .map(|(n, v)| format!("{}: {}", js_str(n), self.js_val(v, &Vec::new()).unwrap()))
-            .collect();
+        let init: Vec<String> = self.state.iter().map(|(n, v)| format!("{}: {}", js_str(n), self.js_val(v, &Vec::new()).unwrap())).collect();
         let _ = writeln!(out, "const $s = state({{ {} }});", init.join(", "));
         if !user_js.trim().is_empty() {
             out.push_str("// page script\n");
@@ -860,11 +933,7 @@ impl Gen<'_> {
             out.push('\n');
         }
         out.push_str("// compiled template\nstart($s, {\n");
-        let _ = writeln!(
-            out,
-            "events: [{}],",
-            self.events.iter().map(|e| js_str(e)).collect::<Vec<_>>().join(", ")
-        );
+        let _ = writeln!(out, "events: [{}],", self.events.iter().map(|e| js_str(e)).collect::<Vec<_>>().join(", "));
         out.push_str("blocks: {\n");
         for (k, v) in &self.blocks {
             let _ = writeln!(out, "{k}: {},", coalesce(v, "h += \"", "\";").trim_end());

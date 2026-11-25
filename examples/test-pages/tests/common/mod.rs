@@ -115,6 +115,20 @@ pub async fn send(router: &Router, req: Request<Body>) -> Res {
     Res { status, headers, body }
 }
 
+/// Replaces each `{param}` in a route pattern with `hello`, which is a legal URI.
+pub fn located(pattern: &str) -> String {
+    let mut out = String::new();
+    let mut rest = pattern;
+    while let Some(start) = rest.find('{') {
+        let end = rest[start + 1..].find('}').expect("param brace");
+        out.push_str(&rest[..start]);
+        out.push_str("hello");
+        rest = &rest[start + 1 + end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
 pub fn get(path: &str, cookie: Option<&str>) -> Request<Body> {
     let mut b = Request::get(path).header(header::HOST, "localhost");
     if let Some(c) = cookie {

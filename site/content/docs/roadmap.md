@@ -13,7 +13,7 @@ This page lists what exists, what does not exist yet, and the rough edges in wha
 
 | Area | Available in 0.1 |
 | --- | --- |
-| Pages | `.rk` files under `src/routes`, file-path routing, `index.rk`, nested directories |
+| Pages | `.rk` files under `src/routes`, file-path routing, `index.rk`, nested directories, `layout.rk`, one `[param]` segment |
 | Template | Text, `{expr}`, static/bound/mixed attributes, `{#if}`/`{:else if}`/`{:else}`, `{#each list as item, i}`, comments |
 | Expressions | Field reads, `.length`, literals, `!`, `&&`, `\|\|`, `===`, `!==`, `<`, `<=`, `>`, `>=`, evaluated with JavaScript semantics in Rust |
 | Interactivity | `$state` with primitive literals, `on<event>` handlers with any JavaScript, page script code, delegated events |
@@ -32,12 +32,11 @@ These are absent from the code. Where a page in the docs mentions one, it links 
 
 ### Authoring
 
-- **Layouts.** No shared shell around pages. Navigation and base styles are repeated per page.
-- **Components.** `<DataSource>` is the only component. You cannot define or import your own.
+- **Components.** `<DataSource>` is the only component. You cannot define or import your own. Layouts wrap a folder; they are not components.
 - **Custom `<head>` content.** The document shell is fixed: no extra `<meta>`, `<link>` or favicon tags, and `lang="en"` always.
 - **Dynamic titles.** `<title>` takes literal text only.
 - **CSS scoping.** Styles are global within a page.
-- **Shared stylesheets.** No way to share CSS between pages through the compiler.
+- **A separate shared stylesheet.** A layout's `<style>` is prepended to each wrapped page's sheet. There is no one CSS file shared by URL.
 - **Directives.** No `bind:`, `class:`, `use:` or spread attributes.
 - **More block types.** No `{@html}`, `{#await}`, `{#key}`, or `{:else}` for empty `{#each}`.
 
@@ -49,8 +48,8 @@ These are absent from the code. Where a page in the docs mentions one, it links 
 
 ### Routing and data
 
-- **Dynamic route parameters.** Every route is a fixed path; there is no `[slug].rk`.
-- **Source inputs.** Resolvers receive only the request context, not URL parameters, query strings or arguments from the page.
+- **More than one dynamic segment.** A route has at most one `[param]`. Rest parameters (`[...slug]`) and optional segments (`[[slug]]`) are rejected, and a dynamic page cannot be prerendered. There are no content collections.
+- **Source inputs beyond the route parameter.** A resolver takes `slug: &str` only when every file that imports it sits on that same `[param]`. It does not receive a query string, or an argument from the page.
 - **Client refresh.** A client-loaded source is fetched once per page load. There is no way to refetch it except the Retry button after a failure.
 - **Renamed imports.** `import { account as acct } from "$sources"` is rejected.
 

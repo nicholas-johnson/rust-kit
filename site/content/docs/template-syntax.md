@@ -206,7 +206,7 @@ These are compile errors or are not recognised in this release:
 | Function and method calls in `{…}` | Compile error; see [Expressions](/docs/expressions/) |
 | `{#each}` over `$state` | Compile error |
 | `class:`, `bind:`, `use:` directives, spread attributes | Not recognised |
-| Slots, layouts, `<svelte:head>`-style head content | Not available |
+| `<slot />` outside `layout.rk`, `<svelte:head>`-style head content | `<slot />` belongs in [`layout.rk`](/docs/pages-and-routes/#layouts). Extra head content is not available |
 
 For example, a component import fails like this:
 

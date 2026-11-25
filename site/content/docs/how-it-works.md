@@ -63,7 +63,7 @@ In the example there are three blocks: `{#if editing}`, `{#if showActivity}`, an
 
 The same tree is walked twice.
 
-The **Rust walk** produces an `async fn render(ctx)` that:
+The **Rust walk** produces an `async fn render(ctx, param)` that:
 
 1. starts every `load="server"` source at once with `try_join!`, so independent reads run concurrently and each source is called once per request;
 2. writes static HTML with `push_str`, coalescing adjacent literals into single writes;

@@ -65,7 +65,7 @@ pub async fn name(ctx: &RequestContext<AppState>) -> Result<View, Error>
 | Part | Requirement |
 | --- | --- |
 | Name | Must match the name the page imports. Renaming on import (`import { account as a }`) is rejected by the compiler. |
-| Argument | One `&RequestContext<AppState>`. Sources take no other inputs yet: no route parameters, no query string, no arguments from the page. See the [roadmap](/docs/roadmap/). |
+| Argument | `&RequestContext<AppState>`, and `slug: &str` when every page that imports the source sits on the same `[slug]`. No query string and no argument from the page. See [Pages and routes](/docs/pages-and-routes/#one-dynamic-segment). |
 | Return | `Result<View, rustkit::Error>`. The error decides the response; see [Errors](/docs/errors/). |
 | View | A struct deriving `serde::Serialize`, with `#[serde(rename_all = "camelCase")]`. |
 
@@ -169,7 +169,7 @@ Only sources that some page loads with `load="client"` get an HTTP endpoint. A s
 
 ## Limitations in v0.1
 
-- Sources take no parameters. A page cannot ask for "account 42"; the resolver can only use the session and app state.
+- The only extra argument is the route's one parameter, and only when every importer sits on that `[param]`. A page cannot pass its own argument, and a resolver cannot read the query string.
 - There is no client-side refresh. Once the browser has a client-loaded view, it keeps it for the life of the page.
 - There is no built-in caching of resolver results across requests. Each page request calls each server source once.
 

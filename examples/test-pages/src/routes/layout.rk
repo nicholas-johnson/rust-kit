@@ -1,0 +1,7 @@
+<header id="site-layout"><a href="/">Rust-kit test pages</a></header>
+<slot />
+
+<style>
+  #site-layout { font-weight: 600; margin: 0 0 1rem; }
+  #site-layout a { color: inherit; }
+</style>

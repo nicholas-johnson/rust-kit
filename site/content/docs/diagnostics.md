@@ -112,7 +112,7 @@ The only component is `<DataSource>`. Any tag that starts with an uppercase lett
 | `` `source` must name an import from "$sources" `` | `source={data.x}` or another non-name expression. | Write `source={account}`: braces and a bare name. |
 | `` <DataSource> needs `load="server"` or `load="client"` `` | `load` is missing. | Add it. There is no default. |
 | `` `load` must be "server" or "client" `` | Any other value. | Use one of the two. |
-| `` unexpected attribute `X` on <DataSource> `` | Anything other than `source={…}`, `load="…"` and `let:name`. A quoted `source="account"` or a braced `load={x}` also lands here. | Remove it, or fix its form. Sources take no inputs yet. |
+| `` unexpected attribute `X` on <DataSource> `` | Anything other than `source={…}`, `load="…"` and `let:name`. A quoted `source="account"` or a braced `load={x}` also lands here. | Remove it, or fix its form. A route parameter is not an attribute on `<DataSource>`. |
 | `` invalid `let:` name `` | `let:1x` or similar. | Use an identifier. Without `let:`, the binding is `data`. |
 | `` `X` is not imported from "$sources" `` | The page uses a source it never imported. | Add `import { X } from "$sources";` to the script. |
 

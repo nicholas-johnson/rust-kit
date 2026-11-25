@@ -53,13 +53,13 @@ Scoped styles are not available yet. If you need isolation within a page, use a 
 
 ## Sharing styles between pages
 
-There is no layout or shared stylesheet mechanism in this release, and a page cannot import another CSS file through the compiler. Your options today:
+A [`layout.rk`](/docs/pages-and-routes/#layouts) `<style>` is concatenated ahead of each wrapped page's `<style>`, in one hashed file per page, so the page's rules win. A page cannot import another CSS file through the compiler, and there is no single stylesheet URL shared across pages. Your options today:
 
 - **Repeat the shared rules in each page's `<style>`.** The bundled demo does this for its navigation and base typography. Each page's CSS file is cached separately, so the cost is a little duplicated download, not a slower page.
 - **Add a stylesheet link by hand.** You cannot add to `<head>`, but a `<link rel="stylesheet">` in the template body works in every current browser. You would serve that file yourself, for example with an extra axum route.
 - **Use `@import`** at the top of a page's `<style>` to pull in a stylesheet you serve yourself. This costs an extra round trip before rendering, so prefer one of the first two.
 
-Layouts are on the [roadmap](/docs/roadmap/), and shared styles are expected to follow them.
+A separate shared stylesheet file is on the [roadmap](/docs/roadmap/).
 
 ## Loading and error states
 
@@ -128,4 +128,4 @@ Attribute rules apply to `class` and `style` like any other attribute:
 - One `<style>` per page becomes one hashed, immutable CSS file linked in `<head>`.
 - Styles are global within the page; nothing is scoped or rewritten.
 - `.rk-loading` and `.rk-error` mark client-loading states.
-- Shared styles, scoping and layouts are not available yet.
+- A layout's CSS is copied into each page's sheet. Scoping, and a stylesheet shared by URL, are not available yet.

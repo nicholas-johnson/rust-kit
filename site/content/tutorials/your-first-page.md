@@ -246,7 +246,7 @@ To check that you understand the routing rule, create `src/routes/about.rk`:
 </main>
 ```
 
-Stop the server with Ctrl+C, run `cargo run` again, and open [http://127.0.0.1:3000/about](http://127.0.0.1:3000/about). Every page is its own complete file. There are no shared layouts yet, so if you want the same navigation on several pages, you repeat it in each one. Layouts are on the [roadmap](/docs/roadmap/).
+Stop the server with Ctrl+C, run `cargo run` again, and open [http://127.0.0.1:3000/about](http://127.0.0.1:3000/about). Every page is its own file. To share the navigation, add a `layout.rk` beside them; see [Pages and routes](/docs/pages-and-routes/#layouts).
 
 ## Next steps
 

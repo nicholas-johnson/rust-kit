@@ -20,10 +20,10 @@ site                      generator for rust-kit.com (docs, tutorials, landing p
 
 ## Test pages
 
-`examples/test-pages` has 18 tiny pages, each exercising one feature: escaping,
+`examples/test-pages` has a small page for each feature: escaping,
 number formatting, attributes, truthiness, comparisons (including UTF-16 string
 order), loops, state, nested blocks, the handoff payload, client loading and
-forms. Browse them with:
+forms, plus a blog with nested layouts and a `[slug]` segment. Browse them with:
 
 ```bash
 cargo run -p test-pages
@@ -120,7 +120,7 @@ prerendered routes and assets to `dist/` and prints JavaScript and CSS bytes per
 `examples/account-demo/src/routes/account.rk` uses the proposal's account page
 exactly as written. For that page the compiler emits:
 
-- **Rust**: `render(ctx)` loads every `load="server"` source at once with
+- **Rust**: `render(ctx, param)` loads every `load="server"` source at once with
   `try_join!` (each source once per request), escapes every bound value, and
   writes the HTML.
 - **Blocks**: anything that reads `$state` or loads on the client becomes a
@@ -132,7 +132,8 @@ exactly as written. For that page the compiler emits:
   safely inside an HTML `<script>`.
 - **Endpoints**: only sources some page loads with `load="client"` get
   `GET /_rk/source/{name}`. That endpoint runs the same resolver with the same
-  session. `account` is server-only, so it has no endpoint.
+  session. A client source that takes a route parameter also receives it as a
+  query string (`?slug=notes`). `account` is server-only, so it has no endpoint.
 - **Assets**: a content-hashed page module (662 B gzipped for the account page),
   the shared runtime (2.8 KB gzipped), and a stylesheet. A page with no state
   and no handlers gets no module and no `<script>` tag.
@@ -225,6 +226,21 @@ The browser half was checked by hand in Chromium:
 - Every request-time page carries a `Server-Timing` header with `sources;dur=…` and
   `render;dur=…`, which separates upstream latency from render CPU time.
 
+### Layouts and one route parameter
+
+`layout.rk` in a folder wraps the pages in that folder and is not itself a
+URL. Nested folders nest layouts, outermost first. The layout marks where the
+page goes with `<slot />`. Its `<style>` is concatenated ahead of the page's,
+so the page's rules win. The document title is the page's, or the nearest
+layout's when the page has none.
+
+`blog/[slug].rk` is `/blog/{slug}`. The parameter is part of the page: the
+generated module has `struct Params { slug: String }`, `{slug}` is in scope,
+and a resolver takes `slug: &str` when every file that imports it sits on that
+same segment. A source also imported from a fixed path stays `(ctx)`; mixing
+the two is a compile error. One `[param]` per route. A dynamic page cannot be
+prerendered.
+
 ## Not in this milestone
 
 - **Upstream service**: the accounts service is an in-memory stand-in with
@@ -239,9 +255,11 @@ The browser half was checked by hand in Chromium:
   is lost.
 - **Handlers in server-rendered loops**: a handler inside a server-rendered
   `{#each}` can't read the loop item yet. This is diagnosed.
-- **Sources**: they take no inputs, and there is no client refresh. A failed
-  client load shows a Retry button.
-- **Not built yet**: CSS scoping, layouts, dynamic route parameters,
-  persistent session storage, and component imports.
+- **Sources**: the only input a resolver can take is the route's one parameter.
+  There is no query string, no argument from the page, and no client refresh.
+  A failed client load shows a Retry button.
+- **Not built yet**: CSS scoping, rest parameters (`[...slug]`), optional
+  segments (`[[slug]]`), more than one `[param]` per route, content
+  collections, persistent session storage, and component imports.
 - **Views**: they must serialize with `#[serde(rename_all = "camelCase")]` so
   that their JSON names match what templates read.

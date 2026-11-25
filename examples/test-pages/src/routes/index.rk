@@ -19,6 +19,7 @@
   <li><a href="/toggle">toggle</a>: server data handed to the browser, one field at a time</li>
   <li><a href="/branches-0">branches-0</a>, <a href="/branches-2">branches-2</a>, <a href="/branches-5">branches-5</a>: the same chain with different initial state</li>
   <li><a href="/list-server">list-server</a> and <a href="/list-client">list-client</a>: the same markup loaded on the server and in the browser</li>
+  <li><a href="/blog">blog</a>: a layout, nested layouts, and one <code>[slug]</code> segment</li>
   <li><a href="/form">form</a>: CSRF-protected posts, rendered by Rust and by the browser</li>
   <li><a href="/nan">nan</a>: NaN, Infinity and f32 values, which JSON can't carry as Rust holds them</li>
 </ul>

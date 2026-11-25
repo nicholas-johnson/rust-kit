@@ -29,13 +29,14 @@ pub struct Page {
     pub render_time: Duration,
 }
 
-pub type RenderFn<S> = for<'a> fn(&'a RequestContext<S>) -> BoxFut<'a, Result<Page, Error>>;
-pub type SourceApiFn<S> =
-    for<'a> fn(&'a str, &'a RequestContext<S>) -> Option<BoxFut<'a, Result<serde_json::Value, Error>>>;
+pub type RenderFn<S> = for<'a> fn(&'a RequestContext<S>, Option<&'a str>) -> BoxFut<'a, Result<Page, Error>>;
+pub type SourceApiFn<S> = for<'a> fn(&'a str, &'a RequestContext<S>, &'a [(&'a str, &'a str)]) -> Option<BoxFut<'a, Result<serde_json::Value, Error>>>;
 
 /// One compiled route.
 pub struct Route<S> {
     pub path: &'static str,
+    /// The single dynamic segment's name, when `path` contains `{name}`.
+    pub param: Option<&'static str>,
     pub prerender: bool,
     pub render: RenderFn<S>,
     /// Browser JavaScript this route loads (runtime plus page module), in bytes.
@@ -158,8 +159,11 @@ impl<S: Send + Sync + 'static> App<S> {
     pub async fn prerender(&self) -> Result<Vec<(&'static str, String)>, Error> {
         let mut out = Vec::new();
         for r in self.manifest.routes.iter().filter(|r| r.prerender) {
+            if r.param.is_some() {
+                return Err(Error::Internal(format!("dynamic route {} cannot be prerendered", r.path)));
+            }
             let ctx = RequestContext::for_build(self.state.clone());
-            let page = (r.render)(&ctx).await?;
+            let page = (r.render)(&ctx, None).await?;
             out.push((r.path, page.html));
         }
         Ok(out)
@@ -217,29 +221,29 @@ impl<S: Send + Sync + 'static> App<S> {
             let shared = shared.clone();
             let render = route.render;
             let path = route.path;
+            let param = route.param;
+            if param.is_some() {
+                router = router.route(
+                    path,
+                    get(move |UrlPath(value): UrlPath<String>, headers: HeaderMap| async move {
+                        let ctx = shared.context(&headers);
+                        let next = request_path(path, param, Some(&value));
+                        match render(&ctx, Some(&value)).await {
+                            Ok(page) => html_response(page, &ctx),
+                            Err(Error::Unauthorized) => redirect(&format!("{}?next={next}", shared.login_path), ctx.take_set_cookie()),
+                            Err(e) => error_page(&e),
+                        }
+                    }),
+                );
+                continue;
+            }
             router = router.route(
                 path,
                 get(move |headers: HeaderMap| async move {
                     let ctx = shared.context(&headers);
-                    match render(&ctx).await {
-                        Ok(page) => {
-                            let timing = format!(
-                                "sources;dur={:.3}, render;dur={:.3}",
-                                page.sources_time.as_secs_f64() * 1000.0,
-                                page.render_time.as_secs_f64() * 1000.0
-                            );
-                            let mut res = Response::builder()
-                                .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
-                                .header("server-timing", timing);
-                            res = cache_headers(res, ctx.is_personalised());
-                            if let Some(c) = ctx.take_set_cookie() {
-                                res = res.header(header::SET_COOKIE, c);
-                            }
-                            res.body(Body::from(page.html)).unwrap()
-                        }
-                        Err(Error::Unauthorized) => {
-                            redirect(&format!("{}?next={}", shared.login_path, path), ctx.take_set_cookie())
-                        }
+                    match render(&ctx, None).await {
+                        Ok(page) => html_response(page, &ctx),
+                        Err(Error::Unauthorized) => redirect(&format!("{}?next={path}", shared.login_path), ctx.take_set_cookie()),
                         Err(e) => error_page(&e),
                     }
                 }),
@@ -250,9 +254,11 @@ impl<S: Send + Sync + 'static> App<S> {
             let shared = shared.clone();
             router = router.route(
                 "/_rk/source/{name}",
-                get(move |UrlPath(name): UrlPath<String>, headers: HeaderMap| async move {
-                    source_endpoint(&shared, &name, &headers).await
-                }),
+                get(
+                    move |UrlPath(name): UrlPath<String>, headers: HeaderMap, axum::extract::RawQuery(query): axum::extract::RawQuery| async move {
+                        source_endpoint(&shared, &name, &headers, query.as_deref()).await
+                    },
+                ),
             );
         }
 
@@ -268,9 +274,7 @@ impl<S: Send + Sync + 'static> App<S> {
                         }
                         let ctx = shared.context(&headers);
                         if !ctx.check_csrf(fields.get("_csrf").map(String::as_str)) {
-                            return error_page(&Error::BadRequest(
-                                "This form has expired. Reload the page and try again.".into(),
-                            ));
+                            return error_page(&Error::BadRequest("This form has expired. Reload the page and try again.".into()));
                         }
                         match action(ctx.clone(), Form(fields)).await {
                             Ok(Redirect(to)) => redirect(&to, ctx.take_set_cookie()),
@@ -302,13 +306,15 @@ impl<S: Send + Sync + 'static> App<S> {
     }
 }
 
-async fn source_endpoint<S>(shared: &Shared<S>, name: &str, headers: &HeaderMap) -> Response<Body> {
+async fn source_endpoint<S>(shared: &Shared<S>, name: &str, headers: &HeaderMap, query: Option<&str>) -> Response<Body> {
     // Browsers label cross-site requests; refuse them outright.
     if headers.get("sec-fetch-site").is_some_and(|v| v == "cross-site") {
         return json_error(&Error::Forbidden);
     }
     let ctx = shared.context(headers);
-    let Some(fut) = (shared.source_api)(name, &ctx) else {
+    let owned = query_pairs(query.unwrap_or(""));
+    let pairs: Vec<(&str, &str)> = owned.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    let Some(fut) = (shared.source_api)(name, &ctx, &pairs) else {
         return json_error(&Error::NotFound);
     };
     match fut.await {
@@ -318,6 +324,76 @@ async fn source_endpoint<S>(shared: &Shared<S>, name: &str, headers: &HeaderMap)
         }
         Err(e) => json_error(&e),
     }
+}
+
+fn html_response<S>(page: Page, ctx: &RequestContext<S>) -> Response<Body> {
+    let timing = format!("sources;dur={:.3}, render;dur={:.3}", page.sources_time.as_secs_f64() * 1000.0, page.render_time.as_secs_f64() * 1000.0);
+    let mut res = Response::builder().header(header::CONTENT_TYPE, "text/html; charset=utf-8").header("server-timing", timing);
+    res = cache_headers(res, ctx.is_personalised());
+    if let Some(c) = ctx.take_set_cookie() {
+        res = res.header(header::SET_COOKIE, c);
+    }
+    res.body(Body::from(page.html)).unwrap()
+}
+
+/// Replaces `{name}` in an axum pattern with the captured segment, percent-encoded.
+fn request_path(pattern: &str, param: Option<&str>, value: Option<&str>) -> String {
+    match (param, value) {
+        (Some(name), Some(value)) => pattern.replacen(&format!("{{{name}}}"), &encode_segment(value), 1),
+        _ => pattern.to_owned(),
+    }
+}
+
+fn encode_segment(s: &str) -> String {
+    let mut out = String::new();
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => out.push(b as char),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+fn query_pairs(q: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for pair in q.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        out.push((percent_decode(k), percent_decode(v)));
+    }
+    out
+}
+
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b'%' if i + 2 < b.len() => {
+                let hex = &s[i + 1..i + 3];
+                if let Ok(v) = u8::from_str_radix(hex, 16) {
+                    out.push(v);
+                    i += 3;
+                } else {
+                    out.push(b[i]);
+                    i += 1;
+                }
+            }
+            c => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 fn cache_headers(res: axum::http::response::Builder, personalised: bool) -> axum::http::response::Builder {

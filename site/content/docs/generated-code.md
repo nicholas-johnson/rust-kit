@@ -54,10 +54,10 @@ Each page becomes a module, `page_<stem>`, holding `render` and `render_boxed`. 
 pub mod page_profile {
 const CSS: Option<&str> = Some("/_rk/assets/profile.1a2b3c4d.css");
 const JS: Option<&str> = Some("/_rk/assets/profile.5e6f7a8b.js");
-pub async fn render(ctx: &::rustkit::RequestContext<crate::AppState>)
+pub async fn render(ctx: &::rustkit::RequestContext<crate::AppState>, __param: Option<&str>)
     -> ::std::result::Result<::rustkit::Page, ::rustkit::Error> { /* … */ }
-pub fn render_boxed<'a>(ctx: &'a ::rustkit::RequestContext<crate::AppState>)
-    -> ::rustkit::BoxFut<'a, ::std::result::Result<::rustkit::Page, ::rustkit::Error>> { Box::pin(render(ctx)) }
+pub fn render_boxed<'a>(ctx: &'a ::rustkit::RequestContext<crate::AppState>, __param: Option<&'a str>)
+    -> ::rustkit::BoxFut<'a, ::std::result::Result<::rustkit::Page, ::rustkit::Error>> { Box::pin(render(ctx, __param)) }
 }
 ```
 
@@ -170,22 +170,22 @@ After the page modules come three application-wide items. This is the account de
 /// Sources some page loads in the browser. Only these are reachable over HTTP.
 pub const CLIENT_SOURCES: &[&str] = &["activity"];
 
-pub fn source_api<'a>(name: &'a str, ctx: &'a ::rustkit::RequestContext<crate::AppState>)
+pub fn source_api<'a>(name: &'a str, ctx: &'a ::rustkit::RequestContext<crate::AppState>, params: &'a [(&'a str, &'a str)])
     -> Option<::rustkit::BoxFut<'a, ::std::result::Result<::rustkit::__private::serde_json::Value, ::rustkit::Error>>> {
     match name {
         "activity" => Some(Box::pin(async move {
             let v = crate::sources::activity(ctx).await?;
             Ok(::rustkit::__private::serde_json::to_value(&v)?)
         })),
-        _ => None,
+        _ => { let _ = params; None }
     }
 }
 
 pub fn manifest() -> ::rustkit::Manifest<crate::AppState> {
     ::rustkit::Manifest {
         routes: vec![
-            ::rustkit::Route { path: "/account", prerender: false, render: page_account::render_boxed, js_bytes: 7998, css_bytes: 689 },
-            ::rustkit::Route { path: "/article", prerender: true, render: page_article::render_boxed, js_bytes: 0, css_bytes: 546 },
+            ::rustkit::Route { path: "/account", param: None, prerender: false, render: page_account::render_boxed, js_bytes: 7998, css_bytes: 689 },
+            ::rustkit::Route { path: "/article", param: None, prerender: true, render: page_article::render_boxed, js_bytes: 0, css_bytes: 546 },
             // …
         ],
         assets: vec![

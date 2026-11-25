@@ -7,7 +7,7 @@ order: 3
 
 ## Is Rust-kit ready for production?
 
-Not yet, for most teams. Version 0.1 is the first milestone of a [design proposal](/docs/design/). The code is tested and its security defaults are deliberate, but sessions live in memory, there are no layouts or components, routes cannot take parameters, and the crates are not on crates.io. Use it to evaluate the model, build internal tools, or contribute. The [roadmap](/docs/roadmap/) lists every gap.
+Not yet, for most teams. Version 0.1 is the first milestone of a [design proposal](/docs/design/). The code is tested and its security defaults are deliberate, but sessions live in memory, there are no components, a route can take only one parameter, and the crates are not on crates.io. Use it to evaluate the model, build internal tools, or contribute. The [roadmap](/docs/roadmap/) lists every gap.
 
 ## Do I need Node.js or a bundler?
 
@@ -76,7 +76,7 @@ Templates read JSON-style names like `data.displayName`. The browser sees your v
 
 ## Can a page read the URL or query string?
 
-Not yet. Routes are fixed paths and resolvers receive only the request context. Dynamic route parameters and source inputs are on the [roadmap](/docs/roadmap/).
+A route can take one parameter. `blog/[slug].rk` is `/blog/{slug}`, `{slug}` is in the template, and a resolver takes `slug: &str` when every file that imports it sits on that segment. See [Pages and routes](/docs/pages-and-routes/#one-dynamic-segment). Query strings are not available to pages or sources, so `?next=` still cannot be read in a template. Rest parameters, optional segments and a second dynamic segment are on the [roadmap](/docs/roadmap/).
 
 ## Why did I lose focus while typing?
 

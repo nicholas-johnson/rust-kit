@@ -85,12 +85,21 @@ export function start($s, page) {
     }
   }
 
+  function sourceUrl(name) {
+    let url = "/_rk/source/" + encodeURIComponent(name);
+    if (P.params && typeof P.params === "object") {
+      const q = new URLSearchParams(P.params).toString();
+      if (q) url += "?" + q;
+    }
+    return url;
+  }
+
   function load(name, force) {
     let st = sources.get(name);
     if (st && !force && st.status !== "stale") return st;
     st = { status: "loading", data: st?.data };
     sources.set(name, st);
-    fetch("/_rk/source/" + encodeURIComponent(name), {
+    fetch(sourceUrl(name), {
       credentials: "same-origin",
       headers: { accept: "application/json" },
     })

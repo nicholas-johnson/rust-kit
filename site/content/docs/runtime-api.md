@@ -147,6 +147,8 @@ pub struct Manifest<S> {
 
 pub struct Route<S> {
     pub path: &'static str,
+    /// The single `{name}` in `path`, when the route has one.
+    pub param: Option<&'static str>,
     pub prerender: bool,
     pub render: RenderFn<S>,
     /// Runtime plus page module, uncompressed bytes. 0 for a page with no module.
@@ -174,9 +176,12 @@ pub struct BuildReport {
 }
 
 pub type BoxFut<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-pub type RenderFn<S> = for<'a> fn(&'a RequestContext<S>) -> BoxFut<'a, Result<Page, Error>>;
-pub type SourceApiFn<S> =
-    for<'a> fn(&'a str, &'a RequestContext<S>) -> Option<BoxFut<'a, Result<serde_json::Value, Error>>>;
+pub type RenderFn<S> = for<'a> fn(&'a RequestContext<S>, Option<&'a str>) -> BoxFut<'a, Result<Page, Error>>;
+pub type SourceApiFn<S> = for<'a> fn(
+    &'a str,
+    &'a RequestContext<S>,
+    &'a [(&'a str, &'a str)],
+) -> Option<BoxFut<'a, Result<serde_json::Value, Error>>>;
 ```
 
 [Generated code](/docs/generated-code/) shows a real manifest.
@@ -184,10 +189,10 @@ pub type SourceApiFn<S> =
 ## document
 
 ```rust
-pub fn document(title: &str, css: Option<&str>, body: &str, payload: Option<&str>, js: Option<&str>) -> String
+pub fn document(title: &str, css: &[&str], body: &str, payload: Option<&str>, js: Option<&str>) -> String
 ```
 
-Wraps a rendered body in the HTML document: doctype, `lang="en"`, charset and viewport meta tags, the escaped `<title>`, a stylesheet link and a `modulepreload` link when present, then the body, the [handoff payload](/docs/handoff-payload/) in `<script type="application/json" id="rk-payload">`, and the module `<script>`. Generated code calls it; you rarely need to. There is no way to customise the document shell yet; layouts are on the [roadmap](/docs/roadmap/).
+Wraps a rendered body in the HTML document: doctype, `lang="en"`, charset and viewport meta tags, the escaped `<title>`, a stylesheet link and a `modulepreload` link when present, then the body, the [handoff payload](/docs/handoff-payload/) in `<script type="application/json" id="rk-payload">`, and the module `<script>`. Generated code calls it; you rarely need to. There is no way to customise the document shell yet. A layout wraps the body; see [Pages and routes](/docs/pages-and-routes/#layouts).
 
 ## Sessions and secrets
 
