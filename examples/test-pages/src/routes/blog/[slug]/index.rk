@@ -1,0 +1,15 @@
+<script>
+  import { post } from "$sources";
+  let open = $state(false);
+</script>
+
+<title>Post</title>
+
+<DataSource source={post} load="server" let:data>
+  <article id="post">
+    <h1>{data.title}</h1>
+    <p id="body">{data.body}</p>
+  </article>
+  {#if open}<p id="extra">{slug} — {data.title}</p>{/if}
+</DataSource>
+<button id="more" onclick={() => open = !open}>More</button>

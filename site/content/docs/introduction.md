@@ -82,7 +82,7 @@ What works today:
 - In-memory sessions, CSRF-checked form actions, and sensible cache headers.
 - Prerendering of public pages to static HTML.
 
-What does not exist yet includes layouts, components other than `<DataSource>`, dynamic route parameters, CSS scoping, array or object state, keyed lists, source inputs, persistent sessions, and a project generator. Each is listed with its current status on the [roadmap](/docs/roadmap/).
+What does not exist yet includes components other than `<DataSource>`, more than one dynamic segment per route, CSS scoping, array or object state, keyed lists, query-string inputs, persistent sessions, and a project generator. Layouts and a single `[param]` segment do exist; see [Pages and routes](/docs/pages-and-routes/). Each remaining gap is listed on the [roadmap](/docs/roadmap/).
 
 > [!IMPORTANT]
 > The crates are not published to crates.io. You depend on them from the Git repository, and APIs may change between commits. Pin a revision if you build anything you care about.

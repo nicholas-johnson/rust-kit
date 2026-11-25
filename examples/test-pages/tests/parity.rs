@@ -170,12 +170,7 @@ fn run(node: &str, page: &Page, blocks: &[String], overrides: Value, sources: Va
     let input_path = page.dir.join(format!("input-{}.json", blocks.join("-")));
     std::fs::write(&input_path, input.to_string()).unwrap();
     let out = Command::new(node).arg(page.dir.join("harness.mjs")).arg(&input_path).output().unwrap();
-    assert!(
-        out.status.success(),
-        "node failed:\n{}\n{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "node failed:\n{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     v["blocks"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), v.as_str().unwrap().to_owned())).collect()
 }
@@ -198,7 +193,8 @@ async fn every_block_renders_the_same_in_rust_and_the_browser() {
     let mut checked = 0;
     let mut mismatches = Vec::new();
     for path in &paths {
-        let page = load(&router, path).await;
+        let url = located(path);
+        let page = load(&router, &url).await;
         let ssr = ssr_blocks(&page.html.body);
         let js = run(node, &page, &keys(&ssr), json!({}), json!({}));
         for (key, rust_html) in &ssr {
@@ -225,6 +221,7 @@ async fn state_changes_render_what_rust_would_have_rendered() {
         ("/branches-0", json!({ "n": 5 }), "/branches-5"),
         ("/branches-5", json!({ "n": 0 }), "/branches-0"),
         ("/branches-2", json!({ "n": 5 }), "/branches-5"),
+        ("/blog/hello", json!({ "open": true }), "/blog/hello/open"),
     ] {
         let page = load(&router, from).await;
         let want = ssr_blocks(&send(&router, get(reference, None)).await.body);
@@ -250,6 +247,16 @@ async fn client_loaded_data_renders_like_server_loaded_data() {
     let got = run(node, &page, &keys(&blocks), json!({}), json!({ "items_live": data }));
     let browser_list = inner_html(&got[&blocks[0].0], "list").expect("browser rendered the list");
     assert_eq!(browser_list, server.inner("list"));
+    std::fs::remove_dir_all(&page.dir).ok();
+
+    let server = send(&router, get("/blog/notes", None)).await;
+    let page = load(&router, "/blog/notes/live").await;
+    let data: Value = serde_json::from_str(&send(&router, get("/_rk/source/post_live?slug=notes", None)).await.body).unwrap();
+    let blocks = ssr_blocks(&page.html.body);
+    let post = blocks.iter().find(|(_, h)| h.contains("id=\"post\"") || h.contains("rk-loading")).expect("client post block");
+    let got = run(node, &page, &[post.0.clone()], json!({}), json!({ "post_live": data }));
+    let browser_post = inner_html(&got[&post.0], "post").expect("browser rendered the post");
+    assert_eq!(browser_post, server.inner("post"));
     std::fs::remove_dir_all(&page.dir).ok();
 }
 

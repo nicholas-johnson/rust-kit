@@ -177,7 +177,7 @@ A page opts into prerendering with a *module script*, a second `<script>` elemen
 
 Write the line exactly as `export const prerender = true;`. The compiler looks for that text, so a variation such as `prerender = !false` won't count.
 
-There are no route parameters yet, so each post is its own file. The folder becomes part of the URL: `src/routes/posts/hello-world.rk` is served at `/posts/hello-world`.
+This tutorial gives each post its own file. The folder becomes part of the URL: `src/routes/posts/hello-world.rk` is served at `/posts/hello-world`. One `[slug]` segment is also available; see [Pages and routes](/docs/pages-and-routes/#one-dynamic-segment).
 
 ```rk title=posts/hello-world.rk
 <script context="module">
@@ -225,7 +225,7 @@ There are no route parameters yet, so each post is its own file. The folder beco
 </style>
 ```
 
-Without layouts, the header and styles repeat in every page. Shared layouts and components are on the [roadmap](/docs/roadmap/).
+This tutorial repeats the header in every page. A `layout.rk` can wrap the folder instead; see [Pages and routes](/docs/pages-and-routes/#layouts). Components are on the [roadmap](/docs/roadmap/).
 
 Finally, `src/routes/about.rk` shows that prerendered doesn't mean static behaviour. This page has a toggle:
 

@@ -132,3 +132,47 @@ pub async fn message(ctx: &Ctx) -> Result<MessageView, Error> {
     let text = ctx.last_message.lock().unwrap().clone();
     Ok(MessageView { has_text: !text.is_empty(), text })
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PostView {
+    pub title: String,
+    pub body: String,
+}
+
+fn post_view(slug: &str) -> PostView {
+    match slug {
+        "hello" => PostView {
+            title: "Hello".into(),
+            body: "The first post.".into(),
+        },
+        "notes" => PostView {
+            title: "Notes & drafts".into(),
+            body: "A <tag> & more".into(),
+        },
+        other => PostView {
+            title: format!("Unknown {other}"),
+            body: format!("No post named {other}."),
+        },
+    }
+}
+
+/// Loaded on the server by `blog/[slug]/index.rk`. Takes the route parameter
+/// because every page that imports it sits on `[slug]`.
+pub async fn post(_ctx: &Ctx, slug: &str) -> Result<PostView, Error> {
+    Ok(post_view(slug))
+}
+
+/// The same post, loaded in the browser by `blog/[slug]/live.rk`.
+pub async fn post_live(ctx: &Ctx, slug: &str) -> Result<PostView, Error> {
+    post(ctx, slug).await
+}
+
+/// Returns unauthorized when the slug contains a space, so the redirect can
+/// be checked with a concrete, encoded path.
+pub async fn gate(ctx: &Ctx, slug: &str) -> Result<PostView, Error> {
+    if slug.contains(' ') {
+        return Err(Error::Unauthorized);
+    }
+    post(ctx, slug).await
+}

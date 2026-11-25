@@ -9,11 +9,12 @@ use common::*;
 async fn every_route_renders() {
     let app = test_pages::app(false);
     let paths: Vec<&str> = app.routes().iter().map(|r| r.path).collect();
-    assert_eq!(paths.len(), 18, "{paths:?}");
+    assert_eq!(paths.len(), 23, "{paths:?}");
     let router = app.into_router().await.unwrap();
     for path in paths {
-        let res = send(&router, get(path, None)).await;
-        assert_eq!(res.status, StatusCode::OK, "{path}");
+        let url = located(path);
+        let res = send(&router, get(&url, None)).await;
+        assert_eq!(res.status, StatusCode::OK, "{path} ({url})");
         assert_eq!(res.header("content-type"), "text/html; charset=utf-8", "{path}");
         assert!(res.body.starts_with("<!doctype html>"), "{path}");
         assert!(res.body.contains("<title>"), "{path}");
@@ -24,15 +25,15 @@ async fn every_route_renders() {
 async fn pages_without_state_ship_no_javascript() {
     let app = test_pages::app(false);
     for r in app.routes() {
-        let interactive = !matches!(r.path, "/" | "/static" | "/title" | "/list-server");
+        let interactive = !matches!(r.path, "/" | "/static" | "/title" | "/list-server" | "/blog" | "/blog/{slug}/gated");
         assert_eq!(r.js_bytes > 0, interactive, "{}: js_bytes = {}", r.path, r.js_bytes);
     }
     let router = app.into_router().await.unwrap();
-    for path in ["/", "/static", "/title", "/list-server"] {
+    for path in ["/", "/static", "/title", "/list-server", "/blog", "/blog/hello/gated"] {
         let res = send(&router, get(path, None)).await;
         assert!(!res.body.contains("<script"), "{path} must not load scripts");
     }
-    for path in ["/", "/static"] {
+    for path in ["/", "/static", "/blog"] {
         let res = send(&router, get(path, None)).await;
         assert_eq!(res.header("cache-control"), "public, max-age=300", "{path} is prerendered");
     }
@@ -233,6 +234,52 @@ async fn forms_post_with_csrf_and_show_the_result() {
 
     let after = send(&r, get("/form", Some(&cookie))).await;
     assert_eq!(after.inner("last"), "Last message: &lt;b&gt;hi&lt;/b&gt;");
+}
+
+#[tokio::test]
+async fn layouts_nest_and_the_route_parameter_reaches_the_page() {
+    let r = router().await;
+    let index = send(&r, get("/blog", None)).await;
+    assert!(index.body.contains("id=\"site-layout\""));
+    assert!(index.body.contains("id=\"blog-layout\""));
+    assert_eq!(index.inner("blog-title"), "Blog");
+    assert!(!index.body.contains("id=\"post-layout\""), "the [slug] layout wraps only that directory");
+    assert_eq!(index.header("cache-control"), "public, max-age=300");
+
+    let home = send(&r, get("/", None)).await;
+    assert!(home.body.contains("id=\"site-layout\""));
+    assert!(!home.body.contains("id=\"blog-layout\""));
+
+    let notes = send(&r, get("/blog/notes", None)).await;
+    assert_eq!(notes.inner("post-layout-slug"), "notes");
+    assert!(notes.inner("post").contains("Notes &amp; drafts"));
+    assert_eq!(notes.inner("body"), "A &lt;tag&gt; &amp; more");
+    assert!(!notes.body.contains("id=\"extra\""), "the closed page hides the extra paragraph");
+    assert_eq!(notes.payload().unwrap()["params"]["slug"], "notes");
+
+    let hello = send(&r, get("/blog/hello/open", None)).await;
+    assert_eq!(hello.inner("extra"), "hello — Hello");
+    assert_eq!(hello.inner("body"), "The first post.");
+
+    let other = send(&r, get("/blog/nope", None)).await;
+    assert_eq!(other.inner("body"), "No post named nope.");
+
+    let server_only = send(&r, get("/_rk/source/post", None)).await;
+    assert_eq!(server_only.status, StatusCode::NOT_FOUND, "server-loaded sources get no endpoint");
+
+    let missing = send(&r, get("/_rk/source/post_live", None)).await;
+    assert_eq!(missing.status, StatusCode::BAD_REQUEST);
+    assert!(missing.body.contains("missing route parameter `slug`"));
+
+    let live = send(&r, get("/_rk/source/post_live?slug=notes", None)).await;
+    assert_eq!(live.status, StatusCode::OK);
+    let json: serde_json::Value = serde_json::from_str(&live.body).unwrap();
+    assert_eq!(json["title"], "Notes & drafts");
+    assert_eq!(json["body"], "A <tag> & more");
+
+    let gated = send(&r, get("/blog/a%20b/gated", None)).await;
+    assert_eq!(gated.status, StatusCode::SEE_OTHER);
+    assert_eq!(gated.header("location"), "/login?next=/blog/a%20b/gated");
 }
 
 #[tokio::test]

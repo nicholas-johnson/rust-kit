@@ -15,15 +15,17 @@
 //! }
 //! ```
 
-mod expr;
 mod codegen;
+mod expr;
 mod parse;
+mod route;
 mod script;
 mod tailwind;
 
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub use codegen::Options;
 pub use tailwind::{TAILWIND_ENV, Tailwind};
@@ -141,35 +143,15 @@ fn hash(s: &str) -> String {
     format!("{:08x}", h >> 32)
 }
 
-fn route_path(rel: &Path) -> String {
-    let mut segs: Vec<String> =
-        rel.with_extension("").components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
-    if segs.last().is_some_and(|s| s == "index") {
-        segs.pop();
-    }
-    format!("/{}", segs.join("/"))
-}
-
-fn find_pages(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    let mut entries: Vec<_> = fs::read_dir(dir)?.collect::<Result<_, _>>()?;
-    entries.sort_by_key(|e| e.path());
-    for e in entries {
-        let p = e.path();
-        if p.is_dir() {
-            find_pages(&p, out)?;
-        } else if p.extension().is_some_and(|x| x == "rk") {
-            out.push(p);
-        }
-    }
-    Ok(())
-}
-
 /// Compiles every page under `routes_dir`. On failure, returns rendered
-/// diagnostics for all pages that failed.
+/// diagnostics for all pages that failed. `layout.rk` files wrap the pages
+/// in their directory; they are not routes.
 pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
-    let mut pages = Vec::new();
-    find_pages(&cfg.routes_dir, &mut pages).map_err(|e| format!("reading {}: {e}", cfg.routes_dir.display()))?;
-    let opts = Options { state_type: &cfg.state_type, sources_module: &cfg.sources_module };
+    let prepared = route::prepare(&cfg.routes_dir)?;
+    let opts = Options {
+        state_type: &cfg.state_type,
+        sources_module: &cfg.sources_module,
+    };
     let asset_dir = cfg.out_dir.join("rk_assets");
     fs::create_dir_all(&asset_dir).map_err(|e| e.to_string())?;
 
@@ -194,24 +176,21 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
         assets.push((name, "text/css; charset=utf-8", css));
     }
 
-    for file in &pages {
-        let src = fs::read_to_string(file).map_err(|e| format!("reading {}: {e}", file.display()))?;
-        let rel = file.strip_prefix(&cfg.routes_dir).unwrap();
-        let display = rel.display().to_string();
-        let page = match parse::parse(&src).and_then(|p| codegen::generate(&p, &opts)) {
+    for file in &prepared.pages {
+        let param_sources: BTreeSet<String> = match &file.param {
+            Some(param) => prepared.param_sources.iter().filter(|(_, p)| *p == param).map(|(name, _)| name.clone()).collect(),
+            None => BTreeSet::new(),
+        };
+        let page = match codegen::generate_routed(&file.page, &opts, file.param.as_deref(), &param_sources) {
             Ok(p) => p,
             Err(d) => {
-                errors.push_str(&d.render(&format!("src/routes/{display}"), &src));
+                errors.push_str(&route::render_diag(&prepared.spans, &d));
                 continue;
             }
         };
-        let path = route_path(rel);
-        let stem: String = rel
-            .with_extension("")
-            .to_string_lossy()
-            .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-            .collect();
+        let path = file.pattern.clone();
+        let display = &file.display;
+        let stem: String = file.rel.with_extension("").to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect();
 
         let mut js_bytes = 0;
         let js_url = page.js.as_ref().map(|js| {
@@ -235,9 +214,10 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
             "/// Compiled from `src/routes/{display}`.\n#[allow(unused, unused_mut, non_snake_case, clippy::all)]\npub mod page_{stem} {{\nconst CSS: &[&str] = &{:?};\nconst JS: Option<&str> = {:?};\n{}}}\n",
             css_urls, js_url, page.rust
         );
+        let param = file.param.as_deref();
         let _ = writeln!(
             routes,
-            "::rustkit::Route {{ path: {path:?}, prerender: {}, render: page_{stem}::render_boxed, js_bytes: {js_bytes}, css_bytes: {css_bytes} }},",
+            "::rustkit::Route {{ path: {path:?}, param: {param:?}, prerender: {}, render: page_{stem}::render_boxed, js_bytes: {js_bytes}, css_bytes: {css_bytes} }},",
             page.prerender
         );
         for s in page.client_sources {
@@ -245,7 +225,12 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
                 client_sources.push(s);
             }
         }
-        summaries.push(RouteSummary { path, prerender: page.prerender, js_bytes, css_bytes });
+        summaries.push(RouteSummary {
+            path,
+            prerender: page.prerender,
+            js_bytes,
+            css_bytes,
+        });
     }
     if !errors.is_empty() {
         return Err(errors);
@@ -262,16 +247,26 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
     let _ = writeln!(out, "pub const CLIENT_SOURCES: &[&str] = &{client_sources:?};\n");
     let _ = writeln!(
         out,
-        "pub fn source_api<'a>(name: &'a str, ctx: &'a ::rustkit::RequestContext<{st}>) -> Option<::rustkit::BoxFut<'a, ::std::result::Result<::rustkit::__private::serde_json::Value, ::rustkit::Error>>> {{\n    match name {{"
+        "pub fn source_api<'a>(name: &'a str, ctx: &'a ::rustkit::RequestContext<{st}>, params: &'a [(&'a str, &'a str)]) -> Option<::rustkit::BoxFut<'a, ::std::result::Result<::rustkit::__private::serde_json::Value, ::rustkit::Error>>> {{\n    match name {{"
     );
     for s in &client_sources {
-        let _ = writeln!(
-            out,
-            "        {s:?} => Some(Box::pin(async move {{ let v = {sm}::{s}(ctx).await?; Ok(::rustkit::__private::serde_json::to_value(&v)?) }})),"
-        );
+        if let Some(param) = prepared.param_sources.get(s) {
+            let _ = writeln!(
+                out,
+                "        {s:?} => {{\n            let Some(__p) = params.iter().find(|(k, _)| *k == {param:?}).map(|(_, v)| *v).filter(|v| !v.is_empty()) else {{\n                return Some(Box::pin(async {{ Err(::rustkit::Error::BadRequest(\"missing route parameter `{param}`\".into())) }}));\n            }};\n            Some(Box::pin(async move {{ let v = {sm}::{s}(ctx, __p).await?; Ok(::rustkit::__private::serde_json::to_value(&v)?) }}))\n        }}"
+            );
+        } else {
+            let _ = writeln!(
+                out,
+                "        {s:?} => Some(Box::pin(async move {{ let v = {sm}::{s}(ctx).await?; Ok(::rustkit::__private::serde_json::to_value(&v)?) }})),"
+            );
+        }
     }
-    out.push_str("        _ => None,\n    }\n}\n\n");
-    let _ = writeln!(out, "pub fn manifest() -> ::rustkit::Manifest<{st}> {{\n    ::rustkit::Manifest {{\n        routes: vec![\n{routes}        ],\n        assets: vec![");
+    out.push_str("        _ => { let _ = params; None }\n    }\n}\n\n");
+    let _ = writeln!(
+        out,
+        "pub fn manifest() -> ::rustkit::Manifest<{st}> {{\n    ::rustkit::Manifest {{\n        routes: vec![\n{routes}        ],\n        assets: vec!["
+    );
     for (name, ct, body) in &assets {
         fs::write(asset_dir.join(name), body).map_err(|e| e.to_string())?;
         let _ = writeln!(

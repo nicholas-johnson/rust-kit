@@ -1,0 +1,2 @@
+<p id="post-layout">Slug: <span id="post-layout-slug">{slug}</span></p>
+<slot />

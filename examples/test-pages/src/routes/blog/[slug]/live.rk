@@ -1,0 +1,12 @@
+<script>
+  import { post_live } from "$sources";
+</script>
+
+<title>Live post</title>
+
+<DataSource source={post_live} load="client" let:data>
+  <article id="post">
+    <h1>{data.title}</h1>
+    <p id="body">{data.body}</p>
+  </article>
+</DataSource>

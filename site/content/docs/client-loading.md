@@ -145,5 +145,5 @@ There is no redirect. In the browser, the region shows the error message and the
 - A client `<DataSource>` may appear anywhere, including inside state-dependent blocks.
 - Inside a client region, everything is rendered by the browser. A `load="server"` `<DataSource>` cannot be nested in it; the compiler rejects that (see [Server loading](/docs/server-loading/#where-load-server-may-appear)).
 - The client-loaded view is not in the handoff payload and is not projected; the endpoint returns all of it.
-- Sources take no parameters, so a client source cannot be filtered or paged from the browser.
+- A client source can take the route's one parameter, sent as a query string (`GET /_rk/source/post?slug=notes`). It cannot be filtered or paged from the browser in any other way.
 - Client loading needs JavaScript. Without it, the visitor sees the loading placeholder, so do not put the main content of a page behind `load="client"`.

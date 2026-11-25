@@ -92,7 +92,7 @@ location: /login?next=/account
 cache-control: no-store
 ```
 
-The acceptance test `signed_out_visitors_are_sent_to_sign_in` checks exactly this. `next` is the route's path; any query string on the original request is not included.
+The acceptance test `signed_out_visitors_are_sent_to_sign_in` checks exactly this. `next` is the path that was requested. On a dynamic route it is that concrete path, with the segment percent-encoded (`/blog/a%20b`), not the pattern `/blog/{slug}`. Any query string on the original request is not included.
 
 The sign-in path defaults to `/login`. Change it with `App::login_path`:
 
@@ -101,7 +101,7 @@ rustkit::App::new(generated::manifest(), state)
     .login_path("/sign-in")
 ```
 
-Rust-kit does not read `next` for you. If you want visitors to return to the page they asked for, your sign-in page has to carry `next` through to the action, and the action has to redirect to it. Sources and pages take no URL parameters in v0.1, so there is no built-in way to read `next` in a template yet.
+Rust-kit does not read `next` for you. If you want visitors to return to the page they asked for, your sign-in page has to carry `next` through to the action, and the action has to redirect to it. `next` is a query parameter, and pages and sources cannot read the query string, so there is no built-in way to read it in a template. A route parameter is available; see [Pages and routes](/docs/pages-and-routes/#one-dynamic-segment).
 
 > [!WARNING]
 > If you do redirect to `next`, check that it is a local path (starts with `/` and not `//`). Otherwise your sign-in page becomes an open redirect.

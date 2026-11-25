@@ -1,0 +1,11 @@
+<script context="module">
+  export const prerender = true;
+</script>
+
+<title>Blog</title>
+
+<h1 id="blog-title">Blog</h1>
+<ul id="posts">
+  <li><a href="/blog/hello">Hello</a></li>
+  <li><a href="/blog/notes">Notes</a></li>
+</ul>

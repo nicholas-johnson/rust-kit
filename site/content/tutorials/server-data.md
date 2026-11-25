@@ -284,7 +284,7 @@ When a request for `/tasks` arrives, the generated `render` function:
 A server-loaded source never gets an HTTP endpoint. Try `curl -i http://127.0.0.1:3000/_rk/source/tasks`: it's a 404. The only way to reach this data is through the rendered page, which is exactly what you want for data that a browser has no reason to fetch on its own.
 
 > [!NOTE]
-> Sources don't take inputs yet, so there's no way to write `/tasks/{id}` or to filter by a query parameter. Each source returns one view per request. Route parameters and source inputs are on the [roadmap](/docs/roadmap/).
+> A route can take one `[param]`, and a resolver takes it as `&str` when every importer sits on that segment. This tutorial's source takes only the request context. Query strings and page arguments are on the [roadmap](/docs/roadmap/). See [Pages and routes](/docs/pages-and-routes/#one-dynamic-segment).
 
 ## Next steps
 

@@ -1,0 +1,9 @@
+<script>
+  import { gate } from "$sources";
+</script>
+
+<title>Gated</title>
+
+<DataSource source={gate} load="server" let:data>
+  <p id="gated">{data.title}</p>
+</DataSource>

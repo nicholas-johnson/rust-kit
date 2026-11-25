@@ -1,6 +1,9 @@
 use super::*;
 
-const OPTS: Options = Options { state_type: "crate::AppState", sources_module: "crate::sources" };
+const OPTS: Options = Options {
+    state_type: "crate::AppState",
+    sources_module: "crate::sources",
+};
 
 /// The account page exactly as written in the design proposal.
 const PROPOSAL_PAGE: &str = r#"<script>
@@ -73,7 +76,8 @@ fn formatter_in_initial_render_is_diagnosed() {
 
 #[test]
 fn server_source_inside_browser_region_is_diagnosed() {
-    let src = "<script>\nimport { account } from \"$sources\";\nlet open = $state(false);\n</script>\n{#if open}<DataSource source={account} load=\"server\"><p>{data.displayName}</p></DataSource>{/if}";
+    let src =
+        "<script>\nimport { account } from \"$sources\";\nlet open = $state(false);\n</script>\n{#if open}<DataSource source={account} load=\"server\"><p>{data.displayName}</p></DataSource>{/if}";
     let d = compile_page(src, &OPTS).err().expect("must fail");
     assert!(d.msg.contains("cannot appear inside a region the browser renders"), "{}", d.msg);
 }
@@ -127,7 +131,11 @@ fn tailwind_stylesheet_is_linked_before_page_css() {
         state_type: "crate::AppState".into(),
         sources_module: "crate::sources".into(),
         crate_dir: dir.clone(),
-        tailwind: Some(Tailwind { cli: Some(fake_tailwind(&dir)), input: None, minify: true }),
+        tailwind: Some(Tailwind {
+            cli: Some(fake_tailwind(&dir)),
+            input: None,
+            minify: true,
+        }),
         dev: false,
     };
     let summaries = compile(&cfg).unwrap();
@@ -155,11 +163,171 @@ fn tailwind_stylesheet_is_linked_before_page_css() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+fn compile_tree(label: &str, files: &[(&str, &str)]) -> Result<String, String> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static N: AtomicUsize = AtomicUsize::new(0);
+    let dir = std::env::temp_dir().join(format!("rk-route-{label}-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
+    let _ = std::fs::remove_dir_all(&dir);
+    for (rel, src) in files {
+        let path = dir.join("routes").join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, src).unwrap();
+    }
+    let cfg = Config {
+        routes_dir: dir.join("routes"),
+        out_dir: dir.join("out"),
+        crate_dir: dir.clone(),
+        state_type: "crate::AppState".into(),
+        sources_module: "crate::sources".into(),
+        dev: false,
+        tailwind: None,
+    };
+    let result = compile(&cfg).map(|_| std::fs::read_to_string(dir.join("out/rustkit_generated.rs")).unwrap());
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+#[test]
+fn layouts_wrap_pages_and_are_not_routes() {
+    let generated = compile_tree(
+        "layouts",
+        &[
+            ("layout.rk", "<header id=\"site\">Site</header>\n<slot />\n<style>\nbody { margin: 0; }\n</style>\n"),
+            ("blog/layout.rk", "<nav id=\"blog\">Blog</nav>\n<slot />\n<title>From layout</title>\n"),
+            ("blog/index.rk", "<title>Blog</title>\n<h1>Posts</h1>\n"),
+            ("index.rk", "<title>Home</title>\n<p>Hello</p>\n"),
+        ],
+    )
+    .unwrap();
+    assert!(generated.contains("path: \"/blog\""), "{generated}");
+    assert!(generated.contains("path: \"/\""));
+    assert!(!generated.contains("path: \"/layout\""));
+    assert!(!generated.contains("path: \"/blog/layout\""));
+    let blog = generated.split("pub mod page_blog").nth(1).unwrap();
+    let site = blog.find("Site").unwrap();
+    let nav = blog.find("Blog").unwrap();
+    let posts = blog.find("Posts").unwrap();
+    assert!(site < nav && nav < posts, "outer layout, then inner, then the page");
+    assert!(blog.contains("document(\"Blog\""));
+    // The pages have no <style> of their own; the root layout's sheet is linked.
+    assert!(generated.contains("const CSS: &[&str] = &[\"/_rk/assets/blog_index."));
+    assert!(generated.contains("const CSS: &[&str] = &[\"/_rk/assets/index."));
+    let home = generated.split("pub mod page_index").nth(1).unwrap();
+    assert!(home.contains("Site"));
+    assert!(!home.contains("id=\\\"blog\\\""));
+}
+
+#[test]
+fn a_dynamic_segment_is_part_of_the_page_type() {
+    let generated = compile_tree(
+        "param",
+        &[
+            (
+                "blog/[slug].rk",
+                "<script>\nimport { post } from \"$sources\";\n</script>\n<DataSource source={post} load=\"server\" let:data>\n<p>{slug} {data.title}</p>\n</DataSource>\n",
+            ),
+            ("items/[type]/index.rk", "<p>{type}</p>\n"),
+        ],
+    )
+    .unwrap();
+    assert!(generated.contains("path: \"/blog/{slug}\""), "{generated}");
+    assert!(generated.contains("param: Some(\"slug\")"));
+    assert!(generated.contains("pub struct Params"));
+    assert!(generated.contains("pub slug: ::std::string::String"));
+    assert!(generated.contains("crate::sources::post(ctx, params.slug.as_str())"));
+    assert!(generated.contains("__param: Option<&str>"));
+    assert!(generated.contains("path: \"/items/{type}\""));
+    assert!(generated.contains("params.r#type"));
+}
+
+#[test]
+fn a_source_takes_the_parameter_only_when_every_import_does() {
+    let err = compile_tree(
+        "mixed",
+        &[
+            (
+                "index.rk",
+                "<script>\nimport { post } from \"$sources\";\n</script>\n<DataSource source={post} load=\"server\" let:data><p>{data.title}</p></DataSource>\n",
+            ),
+            (
+                "blog/[slug].rk",
+                "<script>\nimport { post } from \"$sources\";\n</script>\n<DataSource source={post} load=\"server\" let:data><p>{data.title}</p></DataSource>\n",
+            ),
+        ],
+    )
+    .unwrap_err();
+    assert!(err.contains("source `post` is imported with"), "{err}");
+    assert!(err.contains("no parameter"), "{err}");
+
+    let err = compile_tree(
+        "two-names",
+        &[
+            (
+                "blog/[slug].rk",
+                "<script>\nimport { post } from \"$sources\";\n</script>\n<DataSource source={post} load=\"server\" let:data><p>{data.title}</p></DataSource>\n",
+            ),
+            (
+                "users/[id].rk",
+                "<script>\nimport { post } from \"$sources\";\n</script>\n<DataSource source={post} load=\"server\" let:data><p>{data.title}</p></DataSource>\n",
+            ),
+        ],
+    )
+    .unwrap_err();
+    assert!(err.contains("`slug` from"), "{err}");
+    assert!(err.contains("`id` from"), "{err}");
+}
+
+#[test]
+fn route_files_that_are_not_one_parameter_are_rejected() {
+    let cases = [
+        ("blog/[slug]/[id].rk", "only one `[param]`"),
+        ("blog/[...slug].rk", "rest parameters"),
+        ("blog/[[slug]].rk", "optional segments"),
+        ("blog/[slug-name].rk", "not a valid parameter name"),
+        ("blog/[self].rk", "not a valid parameter name"),
+        ("layout.rk", "`layout.rk` needs a `<slot>`"),
+    ];
+    for (file, needle) in cases {
+        let err = compile_tree("bad", &[(file, "<p>No</p>\n"), ("index.rk", "<p>Home</p>\n")]).unwrap_err();
+        assert!(err.contains(needle), "{file}: {err}");
+    }
+
+    let err = compile_tree("two-slots", &[("layout.rk", "<slot />\n<slot />\n")]).unwrap_err();
+    assert!(err.contains("only one `<slot>`"), "{err}");
+
+    let err = compile_tree("page-slot", &[("index.rk", "<slot />\n")]).unwrap_err();
+    assert!(err.contains("`<slot>` is only valid in `layout.rk`"), "{err}");
+
+    let err = compile_tree("dup", &[("blog/[slug].rk", "<p>A</p>\n"), ("blog/[slug]/index.rk", "<p>B</p>\n")]).unwrap_err();
+    assert!(err.contains("both serve `/blog/{slug}`"), "{err}");
+
+    let err = compile_tree(
+        "pre-layout",
+        &[
+            ("layout.rk", "<script context=\"module\">\nexport const prerender = true;\n</script>\n<slot />\n"),
+            ("index.rk", "<p>Home</p>\n"),
+        ],
+    )
+    .unwrap_err();
+    assert!(err.contains("`prerender` belongs on the page"), "{err}");
+
+    let err = compile_tree(
+        "pre-dyn",
+        &[("blog/[slug].rk", "<script context=\"module\">\nexport const prerender = true;\n</script>\n<p>{slug}</p>\n")],
+    )
+    .unwrap_err();
+    assert!(err.contains("no single page to prerender"), "{err}");
+}
+
 #[test]
 fn tailwind_without_a_cli_explains_how_to_install_it() {
     let dir = std::env::temp_dir().join(format!("rk-tailwind-missing-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let tw = Tailwind { cli: Some(dir.join("no-such-tailwindcss")), input: None, minify: true };
+    let tw = Tailwind {
+        cli: Some(dir.join("no-such-tailwindcss")),
+        input: None,
+        minify: true,
+    };
     let err = tw.run(&dir).unwrap_err();
     assert!(err.contains("running"), "{err}");
     let _ = std::fs::remove_dir_all(&dir);

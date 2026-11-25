@@ -115,7 +115,7 @@ Error pages and JSON errors show only `Error::public_message()`. For `Upstream` 
 These are your responsibility in v0.1, or not available yet:
 
 - **Authentication.** Rust-kit stores who is signed in, but checking passwords or talking to an identity provider is up to your action. The demo signs in without a password.
-- **Authorization beyond "signed in".** `require_user` only says someone is signed in. Whether that user may see a record is your resolver's job. Sources take no parameters, which removes one common mistake (trusting an id from the URL), but your upstream calls must still be scoped to `user.id`.
+- **Authorization beyond "signed in".** `require_user` only says someone is signed in. Whether that user may see a record is your resolver's job. A resolver may receive the route's one parameter, which is caller-controlled, so do not treat it as proof of access. Upstream calls must still be scoped to `user.id`.
 - **Rate limiting and brute-force protection.** There is none. Add it in front of the app or around your actions.
 - **Session store limits.** Each visit to a page with a form creates an anonymous in-memory session, and expired sessions are only removed when presented again. A flood of requests can grow memory. Put the app behind something that limits request rates.
 - **Security headers.** The runtime does not set `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options` or similar. Add them at your proxy or with an axum layer on the router from `App::into_router`.
