@@ -33,6 +33,8 @@ pub struct Component {
     pub nodes: Vec<Node>,
     pub script_body: String,
     pub style: Option<String>,
+    pub style_global: bool,
+    pub style_at: Option<usize>,
     /// `$state` names declared in this file, in source order.
     pub state: Vec<String>,
     /// Sources this file imports directly.
@@ -177,6 +179,8 @@ fn load_one(routes_dir: &Path, lib: &Path, from: &Path, import: &ComponentImport
             nodes: page.nodes,
             script_body,
             style: page.style,
+            style_global: page.style_global,
+            style_at: page.style_at,
             state,
             sources,
             props,
@@ -227,17 +231,17 @@ fn script_without_components(src: &str) -> String {
 impl Set {
     /// Inlines nested components into each component body. Call after the
     /// caller has shifted every component's nodes into the diagnostic buffer.
-    pub fn inline(&mut self) -> Result<(), Vec<Diag>> {
+    pub fn inline(&mut self, css_scope: bool) -> Result<(), Vec<Diag>> {
         let paths: Vec<PathBuf> = self.by_path.keys().cloned().collect();
         let mut done = BTreeSet::new();
         let mut diags = Vec::new();
         for path in paths {
-            self.inline_rec(&path, &mut done, &mut Vec::new(), &mut diags);
+            self.inline_rec(&path, css_scope, &mut done, &mut Vec::new(), &mut diags);
         }
         if diags.is_empty() { Ok(()) } else { Err(diags) }
     }
 
-    fn inline_rec(&mut self, path: &Path, done: &mut BTreeSet<PathBuf>, stack: &mut Vec<PathBuf>, diags: &mut Vec<Diag>) {
+    fn inline_rec(&mut self, path: &Path, css_scope: bool, done: &mut BTreeSet<PathBuf>, stack: &mut Vec<PathBuf>, diags: &mut Vec<Diag>) {
         if done.contains(path) || !self.by_path.contains_key(path) {
             return;
         }
@@ -248,7 +252,7 @@ impl Set {
         stack.push(path.to_path_buf());
         let deps: Vec<PathBuf> = self.by_path.get(path).map(|c| c.imports.iter().map(|i| i.path.clone()).collect()).unwrap_or_default();
         for dep in &deps {
-            self.inline_rec(dep, done, stack, diags);
+            self.inline_rec(dep, css_scope, done, stack, diags);
         }
         stack.pop();
         let imports = match self.by_path.get(path) {
@@ -280,6 +284,12 @@ impl Set {
             c.nodes = nodes;
             c.chain = chain;
             c.protected = protected;
+            if css_scope {
+                if let Err(err) = crate::css::apply(&mut c.style, c.style_global, &mut c.nodes) {
+                    let pos = c.style_at.unwrap_or(0) + err.pos;
+                    diags.push(Diag::new(pos, err.msg).help("selectors are scoped to this file. Wrap one in `:global(...)`, or mark the block `<style global>`"));
+                }
+            }
         }
         done.insert(path.to_path_buf());
     }

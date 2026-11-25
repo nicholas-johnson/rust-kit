@@ -21,6 +21,7 @@
   <li><a href="/list-server">list-server</a> and <a href="/list-client">list-client</a>: the same markup loaded on the server and in the browser</li>
   <li><a href="/blog">blog</a>: a layout, nested layouts, and one <code>[slug]</code> segment</li>
   <li><a href="/components">components</a>: a header, a card and a form imported from <code>src/lib</code></li>
+  <li><a href="/scoped">scoped</a> and <a href="/scoped-on">scoped-on</a>: a page style and a component style, before and after a block updates</li>
   <li><a href="/ticks">ticks</a> and <a href="/ticks-2">ticks-2</a>: a component's <code>$state</code>, before and after it changes</li>
   <li><a href="/form">form</a>: CSRF-protected posts, rendered by Rust and by the browser</li>
   <li><a href="/nan">nan</a>: NaN, Infinity and f32 values, which JSON can't carry as Rust holds them</li>

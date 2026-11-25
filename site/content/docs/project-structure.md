@@ -5,13 +5,14 @@ section: Start here
 order: 3
 ---
 
-A Rust-kit app is an ordinary Cargo crate with a build script. There is no configuration file and no special directory outside `src/`. This page describes each piece, using the layout from [Getting started](/docs/getting-started/) and the bundled `examples/account-demo`.
+A Rust-kit app is an ordinary Cargo crate with a build script. The only optional config file is `rustkit.toml` in the crate root. This page describes each piece, using the layout from [Getting started](/docs/getting-started/) and the bundled `examples/account-demo`.
 
 ## The layout
 
 ```text
 my-app/
 ├── Cargo.toml          rustkit + rustkit-compiler (build) dependencies
+├── rustkit.toml        optional: css_scope = false turns CSS scoping off
 ├── build.rs            calls rustkit_compiler::build_script()
 ├── src/
 │   ├── main.rs         server entry point (or lib.rs + main.rs)
@@ -55,6 +56,16 @@ fn main() {
 `build_script()` is a convenience wrapper. It reads `src/routes` relative to `CARGO_MANIFEST_DIR`, writes into `OUT_DIR`, and assumes `crate::AppState` and `crate::sources`. On a compile error it prints every page's diagnostics and exits, which fails the Cargo build.
 
 If you need different paths or names, `rustkit_compiler::compile(&Config { … })` takes them explicitly. See [Compiler API](/docs/compiler-api/).
+
+## `rustkit.toml`
+
+Optional. `build_script()` reads it from the crate root and tells Cargo to rebuild when it changes. The only key is `css_scope`:
+
+```toml
+css_scope = false
+```
+
+Scoping stays on when the file is missing, when the key is omitted, or when the value is `true`. Unknown keys and any other value fail the build. See [Styling](/docs/styling/#styles-are-scoped-to-the-file).
 
 ## `src/routes/`
 

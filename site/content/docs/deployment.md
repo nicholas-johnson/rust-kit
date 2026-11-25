@@ -21,7 +21,7 @@ Build on the same platform you deploy to, or cross-compile as you would for any 
 
 ### Configuration
 
-Rust-kit reads no environment variables or configuration files. Your `main` decides everything: the listen address, whether cookies are `Secure`, the login path, upstream URLs and credentials. Read them however you like, for example from command-line arguments as the demo does, or from environment variables in your own `main`. The [CLI page](/docs/cli/#writing-your-own-serve-and-build) has a complete `main.rs` to start from.
+The server reads no environment variables or configuration files. The compiler reads optional `rustkit.toml` at build time for [`css_scope`](/docs/styling/#turning-scoping-off). Your `main` decides everything else: the listen address, whether cookies are `Secure`, the login path, upstream URLs and credentials. Read them however you like, for example from command-line arguments as the demo does, or from environment variables in your own `main`. The [CLI page](/docs/cli/#writing-your-own-serve-and-build) has a complete `main.rs` to start from.
 
 ## Behind a reverse proxy
 

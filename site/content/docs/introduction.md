@@ -77,12 +77,12 @@ This is version 0.1, the **first milestone** of a [design proposal](/docs/design
 
 What works today:
 
-- `.rk` pages with `{expr}`, `{#if}`, `{#each}`, `<DataSource>`, event handlers, `$state`, a per-page stylesheet, layouts, one `[param]` segment, and components imported from `src/lib`.
+- `.rk` pages with `{expr}`, `{#if}`, `{#each}`, `<DataSource>`, event handlers, `$state`, a per-page stylesheet scoped to the file that wrote it, layouts, one `[param]` segment, and components imported from `src/lib`.
 - Server-loaded and client-loaded data sources, with a minimal handoff payload.
 - In-memory sessions, CSRF-checked form actions, and sensible cache headers.
 - Prerendering of public pages to static HTML.
 
-What does not exist yet includes more than one dynamic segment per route, CSS scoping, per-instance component state, array or object state, keyed lists, query-string inputs, persistent sessions, and a project generator. See [Pages and routes](/docs/pages-and-routes/) for layouts, the single `[param]` segment, and component imports. Each remaining gap is listed on the [roadmap](/docs/roadmap/).
+What does not exist yet includes more than one dynamic segment per route, per-instance component state, array or object state, keyed lists, query-string inputs, persistent sessions, and a project generator. See [Pages and routes](/docs/pages-and-routes/) for layouts, the single `[param]` segment, and component imports, and [Styling](/docs/styling/) for `data-rk` scoping. Each remaining gap is listed on the [roadmap](/docs/roadmap/).
 
 > [!IMPORTANT]
 > The crates are not published to crates.io. You depend on them from the Git repository, and APIs may change between commits. Pin a revision if you build anything you care about.

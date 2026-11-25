@@ -90,7 +90,7 @@ async fn article_builds_to_static_html_without_javascript() {
     let report = app.build(&dir).await.unwrap();
     assert!(report.files.contains(&"article/index.html".to_owned()));
     let html = std::fs::read_to_string(dir.join("article/index.html")).unwrap();
-    assert!(html.contains("<h1>Why render on the server?</h1>"));
+    assert!(strip_scope(&html).contains("<h1>Why render on the server?</h1>"));
     assert!(!html.contains("<script"), "static article must not load scripts");
     assert!(html.contains("rel=\"stylesheet\""));
     std::fs::remove_dir_all(&dir).ok();
@@ -113,7 +113,7 @@ async fn account_greeting_is_in_raw_html_and_read_once() {
 
     let res = send(&router, get("/account", Some(&cookie))).await;
     assert_eq!(res.status, StatusCode::OK);
-    assert!(res.body.contains("<h1>Hello, Alice Liddell</h1>"), "{}", res.body);
+    assert!(strip_scope(&res.body).contains("<h1>Hello, Alice Liddell</h1>"), "{}", res.body);
     assert_eq!(svc.account_reads.load(Ordering::SeqCst) - before, 1, "one upstream read per page");
 
     // The editor's initial value travels in the page; only the field it needs.
@@ -197,7 +197,7 @@ async fn saving_the_profile_updates_upstream_and_the_next_page() {
     assert_eq!(res.header("location"), "/account");
 
     let next = send(&router, get("/account", Some(&cookie))).await;
-    assert!(next.body.contains("<h1>Hello, Alice L.</h1>"));
+    assert!(strip_scope(&next.body).contains("<h1>Hello, Alice L.</h1>"));
     let rec = state.accounts_service.get("alice").await.unwrap();
     assert_eq!(rec.display_name, "Alice L.");
 }
@@ -233,4 +233,19 @@ async fn user_text_is_escaped_in_html_and_payload() {
     assert!(body.contains("Hello, &lt;/script&gt;&lt;img src=x onerror=alert(1)&gt;"));
     assert!(!body.contains("<img"));
     assert_eq!(body.matches("</script>").count(), 2, "only the payload and module tags close");
+}
+
+/// Drops ` data-rk="…"` so an assertion about a tag can ignore scoping.
+fn strip_scope(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    let needle = " data-rk=\"";
+    while let Some(at) = rest.find(needle) {
+        out.push_str(&rest[..at]);
+        let value = at + needle.len();
+        let end = value + rest[value..].find('"').unwrap() + 1;
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
 }

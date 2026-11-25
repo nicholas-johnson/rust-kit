@@ -57,7 +57,7 @@ struct Parsed {
     component_imports: Vec<CompImport>,
 }
 
-pub fn prepare(routes_dir: &Path) -> Result<Prepared, String> {
+pub fn prepare(routes_dir: &Path, css_scope: bool) -> Result<Prepared, String> {
     let mut rels = Vec::new();
     collect(routes_dir, routes_dir, &mut rels).map_err(|e| format!("reading {}: {e}", routes_dir.display()))?;
     rels.sort();
@@ -167,6 +167,9 @@ pub fn prepare(routes_dir: &Path) -> Result<Prepared, String> {
         spans.push(Span { base, src: f.src.clone(), display: format!("src/routes/{}", f.display) });
         buf.push('\n');
         shift_nodes(&mut f.page.nodes, base);
+        if let Some(at) = &mut f.page.style_at {
+            *at += base;
+        }
     }
     let component_files: Vec<PathBuf> = components.by_path.keys().cloned().collect();
     for path in &component_files {
@@ -178,8 +181,11 @@ pub fn prepare(routes_dir: &Path) -> Result<Prepared, String> {
         spans.push(Span { base, src: comp.src.clone(), display: comp.display.clone() });
         buf.push('\n');
         shift_nodes(&mut comp.nodes, base);
+        if let Some(at) = &mut comp.style_at {
+            *at += base;
+        }
     }
-    if let Err(diags) = components.inline() {
+    if let Err(diags) = components.inline(css_scope) {
         for d in diags {
             errors.push_str(&render_diag(&spans, &d));
         }
@@ -189,6 +195,18 @@ pub fn prepare(routes_dir: &Path) -> Result<Prepared, String> {
             let mut diags = Vec::new();
             components.expand(&mut f.page.nodes, &f.component_imports, &mut diags);
             for d in diags {
+                errors.push_str(&render_diag(&spans, &d));
+            }
+        }
+    }
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    if css_scope {
+        for f in &mut parsed {
+            if let Err(err) = crate::css::apply(&mut f.page.style, f.page.style_global, &mut f.page.nodes) {
+                let pos = f.page.style_at.unwrap_or(0) + err.pos;
+                let d = Diag::new(pos, err.msg).help("selectors are scoped to this file. Wrap one in `:global(...)`, or mark the block `<style global>`");
                 errors.push_str(&render_diag(&spans, &d));
             }
         }
@@ -548,7 +566,15 @@ fn compose(layouts: &[&Parsed], page: &Parsed, components: &Set, buf: &mut Strin
     };
 
     let title = page.page.title.clone().or_else(|| layouts.iter().rev().find_map(|l| l.page.title.clone()));
-    PageFile { script, module_script: page.page.module_script.clone(), style: if css.trim().is_empty() { None } else { Some(css) }, title, nodes }
+    PageFile {
+        script,
+        module_script: page.page.module_script.clone(),
+        style: if css.trim().is_empty() { None } else { Some(css) },
+        style_global: false,
+        style_at: None,
+        title,
+        nodes,
+    }
 }
 
 fn first_slot(nodes: &[Node]) -> Option<usize> {

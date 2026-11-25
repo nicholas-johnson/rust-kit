@@ -217,14 +217,14 @@ Create `src/routes/activity.rk`:
   body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
   button { font: inherit; padding: 0.4rem 0.9rem; }
   small { color: #777; margin-left: 0.5rem; }
-  .rk-loading { opacity: 0.6; }
-  .rk-error { color: #b00020; }
+  :global(.rk-loading) { opacity: 0.6; }
+  :global(.rk-error) { color: #b00020; }
 </style>
 ```
 
 The only difference from a server source is `load="client"`. Putting the `<DataSource>` inside `{#if open}` means nothing is fetched until the first click. If you placed it at the top level instead, the server would render a "Loading…" placeholder and the browser would fetch the feed as soon as the module started.
 
-The `.rk-loading` and `.rk-error` classes belong to elements the runtime inserts. Style them however you like.
+The `.rk-loading` and `.rk-error` classes belong to elements the runtime inserts. They are not in your template, so the selectors are written with `:global`. Style them however you like.
 
 Expand **Generated JavaScript** under the sample. The block for the `<DataSource>` has `source: "activity"` and `bind: "data"` instead of a list of state `deps`. That's how the runtime knows to fetch the source and re-render the block when the data arrives.
 

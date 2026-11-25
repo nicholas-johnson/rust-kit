@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 
 use crate::Diag;
 use crate::expr::{Expr, Op};
-use crate::parse::{AttrValue, Element, Load, Node, PageFile, Part};
+use crate::parse::{AttrValue, Element, Load, Node, PageFile, Part, ScopeMark};
 use crate::script::{self, Script};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -449,6 +449,9 @@ impl Gen<'_> {
 
     fn rs_element(&mut self, e: &Element, scope: &Scope, out: &mut String) -> Result<(), Diag> {
         let _ = writeln!(out, "out.push_str(\"<{}\");", e.tag);
+        if let ScopeMark::Scoped(id) = &e.scope {
+            let _ = writeln!(out, "out.push_str({});", rs_str(&format!(" data-rk=\"{id}\"")));
+        }
         let mut handlers = Vec::new();
         for (ai, a) in e.attrs.iter().enumerate() {
             match &a.value {
@@ -807,6 +810,9 @@ impl Gen<'_> {
 
     fn js_element(&mut self, e: &Element, scope: &Scope, cvar: &str, out: &mut String) -> Result<(), Diag> {
         let _ = writeln!(out, "h += \"<{}\";", e.tag);
+        if let ScopeMark::Scoped(id) = &e.scope {
+            let _ = writeln!(out, "h += {};", js_str(&format!(" data-rk=\"{id}\"")));
+        }
         let mut handlers = Vec::new();
         for (ai, a) in e.attrs.iter().enumerate() {
             match &a.value {

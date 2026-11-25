@@ -129,6 +129,7 @@ fn tailwind_stylesheet_is_linked_before_page_css() {
         crate_dir: dir.clone(),
         tailwind: Some(Tailwind { cli: Some(fake_tailwind(&dir)), input: None, minify: true }),
         dev: false,
+        css_scope: true,
     };
     let summaries = compile(&cfg).unwrap();
 
@@ -164,6 +165,10 @@ struct Tree {
 
 /// `lib/…` files are written next to `routes/`, which is where `$lib` points.
 fn compile_tree(label: &str, files: &[(&str, &str)]) -> Result<Tree, String> {
+    compile_files(label, files, true, None)
+}
+
+fn compile_files(label: &str, files: &[(&str, &str)], css_scope: bool, config: Option<&str>) -> Result<Tree, String> {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static N: AtomicUsize = AtomicUsize::new(0);
     let dir = std::env::temp_dir().join(format!("rk-route-{label}-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
@@ -173,7 +178,14 @@ fn compile_tree(label: &str, files: &[(&str, &str)]) -> Result<Tree, String> {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, src).unwrap();
     }
-    let cfg = Config { routes_dir: dir.join("routes"), out_dir: dir.join("out"), crate_dir: dir.clone(), state_type: "crate::AppState".into(), sources_module: "crate::sources".into(), dev: false, tailwind: None };
+    if let Some(text) = config {
+        std::fs::write(dir.join("rustkit.toml"), text).unwrap();
+    }
+    let css_scope = match config {
+        Some(_) => super::config::load(&dir).unwrap().css_scope,
+        None => css_scope,
+    };
+    let cfg = Config { routes_dir: dir.join("routes"), out_dir: dir.join("out"), crate_dir: dir.clone(), state_type: "crate::AppState".into(), sources_module: "crate::sources".into(), dev: false, tailwind: None, css_scope };
     let result = compile(&cfg).map(|_| {
         let rust = std::fs::read_to_string(dir.join("out/rustkit_generated.rs")).unwrap();
         let mut js = String::new();
@@ -403,6 +415,78 @@ fn a_source_imported_by_a_component_follows_the_pages_that_use_it() {
     )
     .unwrap_err();
     assert!(err.contains("source `post` is imported with"), "{err}");
+}
+
+fn scope_ids(rust: &str) -> Vec<String> {
+    let needle = "data-rk=\\\"";
+    let mut out = Vec::new();
+    let mut rest = rust;
+    while let Some(at) = rest.find(needle) {
+        let start = at + needle.len();
+        let end = rest[start..].find('\\').unwrap();
+        out.push(rest[start..start + end].to_owned());
+        rest = &rest[start + end..];
+    }
+    out
+}
+
+#[test]
+fn scoped_selectors_stay_on_their_file_and_globals_do_not() {
+    let built = compile_tree(
+        "scoped",
+        &[
+            ("lib/Chip.rk", "<span id={id} class=\"copy\">Chip</span>\n<span class=\"banner\">Wide</span>\n<style>\n.copy { color: #063; }\n</style>\n"),
+            (
+                "index.rk",
+                "<script>\nimport Chip from \"$lib/Chip.rk\";\n</script>\n<p id=\"page-copy\" class=\"copy\">Page</p>\n<p id=\"page-banner\" class=\"banner\">Banner</p>\n<Chip id=\"outer\" />\n<style>\n.copy { color: #036; }\n:global(.banner) { font-weight: 700; }\n</style>\n",
+            ),
+        ],
+    )
+    .unwrap();
+    let ids = scope_ids(&built.rust);
+    assert!(ids.len() >= 2, "page and chip are both marked: {ids:?}\n{}", built.rust);
+    let page = ids[0].clone();
+    let chip = ids.iter().find(|id| *id != &page).expect("chip has its own scope").clone();
+    assert!(built.css.contains(&format!(".copy[data-rk=\"{page}\"]")), "{}", built.css);
+    assert!(built.css.contains(&format!(".copy[data-rk=\"{chip}\"]")), "{}", built.css);
+    assert!(built.css.contains(".banner { font-weight: 700; }"), "global rule: {}", built.css);
+    assert!(!built.css.contains(".banner[data-rk"), "{}", built.css);
+    // The page's banner element is marked with the page scope, so only the
+    // unscoped rule can style it and the chip's banner together.
+    assert!(built.rust.contains(&format!("data-rk=\\\"{page}\\\"")), "{}", built.rust);
+    assert!(built.rust.contains(&format!("data-rk=\\\"{chip}\\\"")), "{}", built.rust);
+    assert_ne!(page, chip);
+}
+
+#[test]
+fn a_global_style_block_is_not_scoped() {
+    let built = compile_tree(
+        "global-block",
+        &[
+            ("lib/Chip.rk", "<span class=\"copy\">Chip</span>\n<style>\n.copy { color: #063; }\n</style>\n"),
+            ("index.rk", "<script>\nimport Chip from \"$lib/Chip.rk\";\n</script>\n<h1 class=\"copy\">Hi</h1>\n<Chip />\n<style global>\nh1 { color: red; }\n</style>\n"),
+        ],
+    )
+    .unwrap();
+    assert!(built.css.contains("h1 { color: red; }"), "{}", built.css);
+    assert!(!built.css.contains("h1[data-rk"), "{}", built.css);
+    assert!(built.css.contains(".copy[data-rk=\""), "the component stays scoped: {}", built.css);
+    assert!(built.rust.contains("<h1 class=\\\"copy\\\">"), "the page element is unmarked: {}", built.rust);
+    assert!(!built.rust.contains("<h1 data-rk"), "{}", built.rust);
+    assert!(built.rust.contains("data-rk=\\\""), "the chip element is marked: {}", built.rust);
+}
+
+#[test]
+fn rustkit_toml_turns_scoping_off() {
+    let files = [("index.rk", "<p class=\"copy\">Hi</p>\n<style>\n.copy { color: red; }\n</style>\n")];
+    let on = compile_tree("scope-on", &files).unwrap();
+    assert!(on.css.contains(".copy[data-rk=\""), "{}", on.css);
+    assert!(!scope_ids(&on.rust).is_empty(), "{}", on.rust);
+
+    let off = compile_files("scope-off", &files, true, Some("css_scope = false\n")).unwrap();
+    assert!(off.css.contains(".copy { color: red; }"), "{}", off.css);
+    assert!(!off.css.contains("data-rk"), "{}", off.css);
+    assert!(scope_ids(&off.rust).is_empty(), "no scope attribute: {}", off.rust);
 }
 
 #[test]
