@@ -19,7 +19,9 @@ rust-kit/
 │   │       ├── lib.rs             entry points, route mapping, asset hashing, manifest output
 │   │       ├── parse.rs           .rk parser: scripts, style, title, template tree
 │   │       ├── expr.rs            template expression parser and its diagnostics
-│   │       ├── script.rs          page script: $sources imports, $state, JS identifier scanner
+│   │       ├── script.rs          page script: $sources imports, component imports, $state, JS identifier scanner
+│   │       ├── component.rs       load and inline imported .rk components
+│   │       ├── route.rs           layouts, the one dynamic segment, component composition
 │   │       ├── codegen.rs         Rust and JavaScript generation, blocks, handoff payload
 │   │       ├── runtime.js         the shared browser runtime
 │   │       └── tests.rs           compiler tests
@@ -135,6 +137,8 @@ Flags after the language control this:
 | `rk partial` | Not compiled. Use for fragments that are not a whole page. |
 
 A sample must be a complete page, but data sources do not need to exist: `import { anything } from "$sources"` compiles, because the samples are only checked by `rustkit-compiler`, not by `rustc`. That also means a sample can reference view fields that no real resolver has. Keep samples realistic anyway; readers copy them.
+
+`compile_page` checks one file. It does not read `src/lib`, so a sample that imports a component must be marked `partial` (or `fail`, if the point is the diagnostic). Compiling a routes directory is what loads component files.
 
 ## Reporting problems
 

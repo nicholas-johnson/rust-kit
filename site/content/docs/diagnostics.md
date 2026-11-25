@@ -103,11 +103,21 @@ A page with two `<style>` blocks is not an error: the last one wins.
 <Card title="Hello" />
 ```
 
-The only component is `<DataSource>`. Any tag that starts with an uppercase letter is treated as a component. Component imports are not available yet; see the [roadmap](/docs/roadmap/).
+A tag that starts with an uppercase letter is a component. `<DataSource>` is built in. Any other name comes from an import on its own line, `import Header from "$lib/Header.rk"`. See [Components](/docs/pages-and-routes/#components).
 
 | Message | Cause | Fix |
 |---|---|---|
-| `` unknown component `<X>` `` | A capitalised tag other than `DataSource`. | Use plain HTML, or a lowercase tag name. |
+| `` unknown component `<X>` `` | A capitalised tag with no matching import. | Add `import X from "$lib/X.rk"` on its own line, or use a lowercase tag. |
+| `` `<X>` needs a `prop` prop `` | The component template reads `prop` and the tag does not pass it. | Write `prop="…"` or `prop={expr}`. |
+| `` `<X>` has no prop `name` `` | The tag sets a name the template does not read. | Remove it, or read `{name}` in the component. |
+| `` prop `name` must be a string or one `{expression}` `` | A bare attribute, or text mixed with an expression. | Write `name="…"` or `name={expr}`. |
+| `` `<X>` does not take `onclick` `` | An event attribute on a component tag. | Write the handler inside the component. |
+| `` `<X>` has no `<slot>` for its contents `` | The tag has children and the component has no `<slot />`. | Add a slot, or remove the children. |
+| `` a component can have only one `<slot>` `` | Two slots in one component file. | Keep one. |
+| `component cycle: …` | A component imports itself, directly or through another file. | Break the cycle. |
+| `` `$state` `name` is already declared in `…` `` | The same `$state` name in the page, a layout and a component on one page. | Rename one of them. |
+| `` a component cannot set `<title>` `` | A `<title>` in a component file. | Put the title on the page, or on a layout. |
+| `` `prerender` belongs on the page, not on a component `` | `export const prerender = true` in a component. | Put it on the page. |
 | `` <DataSource> needs `source={…}` `` | `source` is missing. | Add `source={name}`. |
 | `` `source` must name an import from "$sources" `` | `source={data.x}` or another non-name expression. | Write `source={account}`: braces and a bare name. |
 | `` <DataSource> needs `load="server"` or `load="client"` `` | `load` is missing. | Add it. There is no default. |
@@ -124,7 +134,7 @@ The only component is `<DataSource>`. Any tag that starts with an uppercase lett
 
 ## The page script
 
-The script is read line by line. An `import … from "$sources"` line and each `let x = $state(…)` line must stand alone; everything else is passed to the browser untouched. See [State and events](/docs/state-and-events/).
+The script is read line by line. An `import … from "$sources"` line, an `import Name from "$lib/….rk"` line (or a relative path ending in `.rk`), and each `let x = $state(…)` line must stand alone; everything else is passed to the browser untouched. See [State and events](/docs/state-and-events/).
 
 ```rk fail title=two-per-line.rk
 <script>
@@ -139,7 +149,11 @@ An import split across lines is not an error in itself: the lines do not match t
 
 | Message | Cause | Fix |
 |---|---|---|
-| `` expected `import { … } from "$sources"` `` | A `$sources` import without braces, such as a default import. | Use named imports. |
+| `` expected `import { … } from "$sources"` `` | A `$sources` import without braces, such as a default import. | Use named imports. A default import of a `.rk` path is a component import, not this error. |
+| `` `Name` is already imported `` | Two component imports use the same name. | Import it once. |
+| `` `name` cannot be a component tag `` | The component import name does not start with an uppercase letter. | Use `Header`, then write `<Header>`. |
+| `` `spec` is not a component path `` | The spec is not `$lib/….rk` or a relative path ending in `.rk`. | Fix the path. `$lib` is `src/lib`, next to `src/routes`. |
+| `` cannot read component `spec` `` | The file is not there. | Check the path. |
 | `` expected `}` `` | The import line has `{` and `"$sources"` but no `}`. | Close the braces. |
 | `renaming a source import is not supported yet` | `import { account as acct }`. | Import the name as it is. |
 | `` expected `let name = $state(…)` `` | A `let` line containing `$state(` but no `=`. | Write a normal declaration. |

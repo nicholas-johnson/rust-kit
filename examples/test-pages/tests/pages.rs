@@ -9,7 +9,7 @@ use common::*;
 async fn every_route_renders() {
     let app = test_pages::app(false);
     let paths: Vec<&str> = app.routes().iter().map(|r| r.path).collect();
-    assert_eq!(paths.len(), 23, "{paths:?}");
+    assert_eq!(paths.len(), 26, "{paths:?}");
     let router = app.into_router().await.unwrap();
     for path in paths {
         let url = located(path);
@@ -25,11 +25,11 @@ async fn every_route_renders() {
 async fn pages_without_state_ship_no_javascript() {
     let app = test_pages::app(false);
     for r in app.routes() {
-        let interactive = !matches!(r.path, "/" | "/static" | "/title" | "/list-server" | "/blog" | "/blog/{slug}/gated");
+        let interactive = !matches!(r.path, "/" | "/static" | "/title" | "/list-server" | "/blog" | "/blog/{slug}/gated" | "/components");
         assert_eq!(r.js_bytes > 0, interactive, "{}: js_bytes = {}", r.path, r.js_bytes);
     }
     let router = app.into_router().await.unwrap();
-    for path in ["/", "/static", "/title", "/list-server", "/blog", "/blog/hello/gated"] {
+    for path in ["/", "/static", "/title", "/list-server", "/blog", "/blog/hello/gated", "/components"] {
         let res = send(&router, get(path, None)).await;
         assert!(!res.body.contains("<script"), "{path} must not load scripts");
     }
@@ -280,6 +280,31 @@ async fn layouts_nest_and_the_route_parameter_reaches_the_page() {
     let gated = send(&r, get("/blog/a%20b/gated", None)).await;
     assert_eq!(gated.status, StatusCode::SEE_OTHER);
     assert_eq!(gated.header("location"), "/login?next=/blog/a%20b/gated");
+}
+
+#[tokio::test]
+async fn components_render_on_the_server() {
+    let r = router().await;
+    let home = send(&r, get("/", None)).await;
+    assert_eq!(home.inner("site-footer"), "Rust-kit test pages", "a layout can import a component");
+    assert!(!home.body.contains("<script"), "a static component adds no script");
+
+    let page = send(&r, get("/components", None)).await;
+    assert_eq!(page.inner("app-header"), "A &amp; B");
+    assert!(page.inner("intro").contains("<h2>Hello</h2>"));
+    assert_eq!(page.inner("inside"), "A card body.");
+    assert!(page.body.contains("id=\"note-form\""));
+    assert!(page.body.contains("action=\"/form/echo\""));
+    assert!(page.body.contains("value=\"a&lt;b&gt;\""));
+    assert!(page.body.contains("name=\"_csrf\""), "a form component gets the CSRF field");
+    assert!(!page.body.contains("<script"), "these components are static");
+
+    let zero = send(&r, get("/ticks", None)).await;
+    assert_eq!(strip_markers(&zero.inner("ticks")), "0");
+    assert!(!zero.body.contains("id=\"tick-msg\""));
+    let two = send(&r, get("/ticks-2", None)).await;
+    assert_eq!(strip_markers(&two.inner("ticks")), "2");
+    assert_eq!(strip_markers(&two.inner("tick-msg")), "ticked 2");
 }
 
 #[tokio::test]

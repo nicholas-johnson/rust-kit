@@ -154,7 +154,7 @@ start($s, {
 | Part | Purpose |
 |---|---|
 | `state({…})` | The reactive store, a `Proxy` seeded with each `$state` initial value. Assigning a different value schedules an update. |
-| page script | Any script lines other than `$sources` imports and `$state` declarations, copied after the store with state names rewritten to `$s.name`. |
+| page script | Any script lines other than `$sources` imports, component imports and `$state` declarations, copied after the store with state names rewritten to `$s.name`. |
 | `events` | Every event type a handler uses. The runtime adds one capturing listener per type on `document` and dispatches by `data-rk-on`. |
 | `blocks` | One entry per block: `deps` lists the state it reads; `render(c, r)` returns its HTML from scope `c`. A client source block also has `source` and `bind`. |
 | `handlers` | Factories: given a scope, return the handler function. Your handler code is copied as written, with state names rewritten. |

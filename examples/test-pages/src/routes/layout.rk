@@ -1,5 +1,9 @@
+<script>
+  import Footer from "$lib/Footer.rk";
+</script>
 <header id="site-layout"><a href="/">Rust-kit test pages</a></header>
 <slot />
+<Footer note="Rust-kit test pages" />
 
 <style>
   #site-layout { font-weight: 600; margin: 0 0 1rem; }

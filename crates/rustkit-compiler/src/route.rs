@@ -12,6 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::Diag;
+use crate::component::{self, CompImport, Set};
 use crate::expr::Expr;
 use crate::parse::{self, AttrValue, Node, PageFile, Part};
 use crate::script;
@@ -36,6 +37,8 @@ pub struct Prepared {
     /// `source name` → the route parameter its resolver takes.
     pub param_sources: BTreeMap<String, String>,
     pub spans: Vec<Span>,
+    /// Component files this build read. Used to rebuild when one changes.
+    pub component_files: Vec<PathBuf>,
 }
 
 struct Parsed {
@@ -48,6 +51,10 @@ struct Parsed {
     param: Option<String>,
     layout: bool,
     classified: bool,
+    source_names: Vec<String>,
+    state_names: Vec<String>,
+    /// Component imports in this file, resolved to absolute paths.
+    component_imports: Vec<CompImport>,
 }
 
 pub fn prepare(routes_dir: &Path) -> Result<Prepared, String> {
@@ -78,23 +85,41 @@ pub fn prepare(routes_dir: &Path) -> Result<Prepared, String> {
                 (String::new(), None, false)
             }
         };
-        parsed.push(Parsed {
-            rel,
-            display,
-            src,
-            page,
-            pattern,
-            param,
-            layout: false,
-            classified,
-        });
+        parsed.push(Parsed { rel, display, src, page, pattern, param, layout: false, classified, source_names: Vec::new(), state_names: Vec::new(), component_imports: Vec::new() });
     }
+    for f in &mut parsed {
+        let Some((src, pos)) = &f.page.script else {
+            continue;
+        };
+        match script::parse(src, *pos) {
+            Ok(s) => {
+                f.source_names = s.sources;
+                f.state_names = s.state.into_iter().map(|(n, _)| n).collect();
+                let from = routes_dir.join(&f.rel);
+                for c in s.components {
+                    match component::resolve(&from, &c.spec, &component::lib_dir(routes_dir), c.pos) {
+                        Ok(path) => f.component_imports.push(CompImport { name: c.name, path, spec: c.spec, pos: c.pos }),
+                        Err(d) => errors.push_str(&d.render(&format!("src/routes/{}", f.display), &f.src)),
+                    }
+                }
+            }
+            Err(d) => errors.push_str(&d.render(&format!("src/routes/{}", f.display), &f.src)),
+        }
+    }
+    let mut roots = Vec::new();
+    for f in &parsed {
+        let from = routes_dir.join(&f.rel);
+        for c in &f.component_imports {
+            roots.push((from.clone(), c.clone()));
+        }
+    }
+    let mut components = component::load(routes_dir, &roots, &mut errors);
     for f in &mut parsed {
         f.layout = f.rel.file_name().is_some_and(|n| n == "layout.rk");
     }
 
     let mut param_sources = BTreeMap::new();
-    if let Err(msg) = source_params(&parsed, &mut param_sources) {
+    if let Err(msg) = source_params(&parsed, &components, &mut param_sources) {
         errors.push_str(&msg);
     }
     for f in &parsed {
@@ -103,7 +128,7 @@ pub fn prepare(routes_dir: &Path) -> Result<Prepared, String> {
                 errors.push_str(&d.render(&format!("src/routes/{}", f.display), &f.src));
             }
         } else if let Some(pos) = first_slot(&f.page.nodes) {
-            let d = Diag::new(pos, "`<slot>` is only valid in `layout.rk`");
+            let d = Diag::new(pos, "`<slot>` belongs in `layout.rk` or a component").help("a page passes children by nesting them in the component tag");
             errors.push_str(&d.render(&format!("src/routes/{}", f.display), &f.src));
         } else if let Err(d) = check_page_prerender(f) {
             errors.push_str(&d.render(&format!("src/routes/{}", f.display), &f.src));
@@ -139,13 +164,37 @@ pub fn prepare(routes_dir: &Path) -> Result<Prepared, String> {
     for f in &mut parsed {
         let base = buf.len();
         buf.push_str(&f.src);
-        spans.push(Span {
-            base,
-            src: f.src.clone(),
-            display: format!("src/routes/{}", f.display),
-        });
+        spans.push(Span { base, src: f.src.clone(), display: format!("src/routes/{}", f.display) });
         buf.push('\n');
         shift_nodes(&mut f.page.nodes, base);
+    }
+    let component_files: Vec<PathBuf> = components.by_path.keys().cloned().collect();
+    for path in &component_files {
+        let Some(comp) = components.by_path.get_mut(path) else {
+            continue;
+        };
+        let base = buf.len();
+        buf.push_str(&comp.src);
+        spans.push(Span { base, src: comp.src.clone(), display: comp.display.clone() });
+        buf.push('\n');
+        shift_nodes(&mut comp.nodes, base);
+    }
+    if let Err(diags) = components.inline() {
+        for d in diags {
+            errors.push_str(&render_diag(&spans, &d));
+        }
+    }
+    if errors.is_empty() {
+        for f in &mut parsed {
+            let mut diags = Vec::new();
+            components.expand(&mut f.page.nodes, &f.component_imports, &mut diags);
+            for d in diags {
+                errors.push_str(&render_diag(&spans, &d));
+            }
+        }
+    }
+    if !errors.is_empty() {
+        return Err(errors);
     }
 
     let mut pages = Vec::new();
@@ -156,23 +205,17 @@ pub fn prepare(routes_dir: &Path) -> Result<Prepared, String> {
         let pattern = f.pattern.clone();
         let chain = layout_chain(&parsed, &f.rel);
         let layouts: Vec<&Parsed> = chain.iter().map(|n| &parsed[*n]).collect();
-        if let Err(msg) = check_state(&layouts, f) {
+        if let Err(msg) = check_state(&layouts, f, &components) {
             errors.push_str(&msg);
             continue;
         }
-        let page = compose(&layouts, f, &mut buf, &mut spans);
-        pages.push(PreparedPage {
-            display: f.display.clone(),
-            rel: f.rel.clone(),
-            pattern,
-            param: f.param.clone(),
-            page,
-        });
+        let page = compose(&layouts, f, &components, &mut buf, &mut spans);
+        pages.push(PreparedPage { display: f.display.clone(), rel: f.rel.clone(), pattern, param: f.param.clone(), page });
     }
     if !errors.is_empty() {
         return Err(errors);
     }
-    Ok(Prepared { pages, param_sources, spans })
+    Ok(Prepared { pages, param_sources, spans, component_files })
 }
 
 pub fn render_diag(spans: &[Span], d: &Diag) -> String {
@@ -211,9 +254,7 @@ fn route_pattern(rel: &Path) -> Result<(String, Option<String>), Diag> {
         }
         if let Some(name) = dynamic_name(seg)? {
             if param.is_some() {
-                return Err(
-                    Diag::new(0, format!("a route can have only one `[param]` segment; this path also has `[{name}]`")).help("rest parameters and multiple dynamic segments are not in this milestone")
-                );
+                return Err(Diag::new(0, format!("a route can have only one `[param]` segment; this path also has `[{name}]`")).help("rest parameters and multiple dynamic segments are not in this milestone"));
             }
             param = Some(name.clone());
             parts.push(format!("{{{name}}}"));
@@ -287,21 +328,21 @@ fn check_page_prerender(f: &Parsed) -> Result<(), Diag> {
     Err(Diag::new(pos + i, format!("`[{name}]` has no single page to prerender")).help("remove `prerender`, or use a fixed path. Content collections are not in this milestone"))
 }
 
-fn source_params(files: &[Parsed], out: &mut BTreeMap<String, String>) -> Result<(), String> {
+fn source_params(files: &[Parsed], components: &Set, out: &mut BTreeMap<String, String>) -> Result<(), String> {
     let mut sites: BTreeMap<String, Vec<(usize, Option<String>)>> = BTreeMap::new();
     let mut errors = String::new();
     for (i, f) in files.iter().enumerate() {
-        let names = match &f.page.script {
-            Some((src, pos)) => match script::parse(src, *pos) {
-                Ok(s) => s.sources,
-                Err(d) => {
-                    errors.push_str(&d.render(&format!("src/routes/{}", f.display), &f.src));
-                    continue;
-                }
-            },
-            None => Vec::new(),
-        };
         let mut seen = BTreeSet::new();
+        let mut names = f.source_names.clone();
+        for import in &f.component_imports {
+            if let Some(comp) = components.by_path.get(&import.path) {
+                for path in &comp.chain {
+                    if let Some(nested) = components.by_path.get(path) {
+                        names.extend(nested.sources.iter().cloned());
+                    }
+                }
+            }
+        }
         for name in names {
             if seen.insert(name.clone()) {
                 sites.entry(name).or_default().push((i, f.param.clone()));
@@ -348,25 +389,50 @@ fn import_pos(f: &Parsed, name: &str) -> usize {
     src.find(name).map_or(*base, |i| base + i)
 }
 
-fn check_state(layouts: &[&Parsed], page: &Parsed) -> Result<(), String> {
+fn check_state(layouts: &[&Parsed], page: &Parsed, components: &Set) -> Result<(), String> {
     let mut seen: BTreeMap<String, String> = BTreeMap::new();
+    let mut seen_components = BTreeSet::new();
     for f in layouts.iter().copied().chain(std::iter::once(page)) {
-        let Some((src, base)) = &f.page.script else {
-            continue;
-        };
-        let script = script::parse(src, *base).map_err(|d| d.render(&format!("src/routes/{}", f.display), &f.src))?;
-        for (name, _) in script.state {
-            if let Some(prev) = seen.get(&name) {
-                let pos = src.find(&format!("let {name}")).map_or(*base, |i| base + i);
-                let d = Diag::new(pos, format!("`$state` `{name}` is already declared in `{prev}`"));
-                return Err(d.render(&format!("src/routes/{}", f.display), &f.src));
+        if let Some((src, base)) = &f.page.script {
+            for name in &f.state_names {
+                if let Some(prev) = seen.get(name) {
+                    let pos = src.find(&format!("let {name}")).map_or(*base, |i| base + i);
+                    let d = Diag::new(pos, format!("`$state` `{name}` is already declared in `{prev}`"));
+                    return Err(d.render(&format!("src/routes/{}", f.display), &f.src));
+                }
+                if page.param.as_ref().is_some_and(|p| p == name) {
+                    let pos = src.find(&format!("let {name}")).map_or(*base, |i| base + i);
+                    let d = Diag::new(pos, format!("`{name}` is the route parameter, so it cannot also be `$state`"));
+                    return Err(d.render(&format!("src/routes/{}", f.display), &f.src));
+                }
+                seen.insert(name.clone(), f.display.clone());
             }
-            if page.param.as_ref().is_some_and(|p| p == &name) {
-                let pos = src.find(&format!("let {name}")).map_or(*base, |i| base + i);
-                let d = Diag::new(pos, format!("`{name}` is the route parameter, so it cannot also be `$state`"));
-                return Err(d.render(&format!("src/routes/{}", f.display), &f.src));
+        }
+        for import in &f.component_imports {
+            let Some(comp) = components.by_path.get(&import.path) else {
+                continue;
+            };
+            for path in &comp.chain {
+                if !seen_components.insert(path.clone()) {
+                    continue;
+                }
+                let Some(nested) = components.by_path.get(path) else {
+                    continue;
+                };
+                for name in &nested.state {
+                    if let Some(prev) = seen.get(name) {
+                        let pos = nested.src.find(&format!("let {name}")).unwrap_or(0);
+                        let d = Diag::new(pos, format!("`$state` `{name}` is already declared in `{prev}`"));
+                        return Err(d.render(&nested.display, &nested.src));
+                    }
+                    if page.param.as_ref().is_some_and(|p| p == name) {
+                        let pos = nested.src.find(&format!("let {name}")).unwrap_or(0);
+                        let d = Diag::new(pos, format!("`{name}` is the route parameter, so it cannot also be `$state`"));
+                        return Err(d.render(&nested.display, &nested.src));
+                    }
+                    seen.insert(name.clone(), nested.display.clone());
+                }
             }
-            seen.insert(name, f.display.clone());
         }
     }
     Ok(())
@@ -397,7 +463,7 @@ fn layout_chain(files: &[Parsed], page: &Path) -> Vec<usize> {
     out
 }
 
-fn compose(layouts: &[&Parsed], page: &Parsed, buf: &mut String, spans: &mut Vec<Span>) -> PageFile {
+fn compose(layouts: &[&Parsed], page: &Parsed, components: &Set, buf: &mut String, spans: &mut Vec<Span>) -> PageFile {
     let mut nodes = page.page.nodes.clone();
     for layout in layouts.iter().rev() {
         let mut tree = layout.page.nodes.clone();
@@ -409,20 +475,61 @@ fn compose(layouts: &[&Parsed], page: &Parsed, buf: &mut String, spans: &mut Vec
     renumber(&mut nodes, &mut next);
 
     let mut css = String::new();
+    let mut seen_css = BTreeSet::new();
+    let push_style = |css: &mut String, style: &str| {
+        if style.trim().is_empty() {
+            return;
+        }
+        if !css.is_empty() && !css.ends_with('\n') {
+            css.push('\n');
+        }
+        css.push_str(style);
+        if !style.ends_with('\n') {
+            css.push('\n');
+        }
+    };
     for f in layouts.iter().copied().chain(std::iter::once(page)) {
+        for import in &f.component_imports {
+            let Some(comp) = components.by_path.get(&import.path) else {
+                continue;
+            };
+            for path in &comp.chain {
+                if !seen_css.insert(path.clone()) {
+                    continue;
+                }
+                if let Some(nested) = components.by_path.get(path) {
+                    if let Some(style) = &nested.style {
+                        push_style(&mut css, style);
+                    }
+                }
+            }
+        }
         if let Some(style) = &f.page.style {
-            if !css.is_empty() && !css.ends_with('\n') {
-                css.push('\n');
-            }
-            css.push_str(style);
-            if !style.ends_with('\n') {
-                css.push('\n');
-            }
+            push_style(&mut css, style);
         }
     }
 
     let mut merged = String::new();
+    let mut seen_script = BTreeSet::new();
     for f in layouts.iter().copied().chain(std::iter::once(page)) {
+        for import in &f.component_imports {
+            let Some(comp) = components.by_path.get(&import.path) else {
+                continue;
+            };
+            for path in &comp.chain {
+                if !seen_script.insert(path.clone()) {
+                    continue;
+                }
+                if let Some(nested) = components.by_path.get(path) {
+                    if !nested.script_body.trim().is_empty() {
+                        merged.push_str(&nested.script_body);
+                        if !nested.script_body.ends_with('\n') {
+                            merged.push('\n');
+                        }
+                    }
+                }
+            }
+        }
         if let Some((src, _)) = &f.page.script {
             merged.push_str(src);
             if !src.ends_with('\n') {
@@ -435,23 +542,13 @@ fn compose(layouts: &[&Parsed], page: &Parsed, buf: &mut String, spans: &mut Vec
     } else {
         let base = buf.len();
         buf.push_str(&merged);
-        spans.push(Span {
-            base,
-            src: merged.clone(),
-            display: format!("src/routes/{} (script)", page.display),
-        });
+        spans.push(Span { base, src: merged.clone(), display: format!("src/routes/{} (script)", page.display) });
         buf.push('\n');
         Some((merged, base))
     };
 
     let title = page.page.title.clone().or_else(|| layouts.iter().rev().find_map(|l| l.page.title.clone()));
-    PageFile {
-        script,
-        module_script: page.page.module_script.clone(),
-        style: if css.trim().is_empty() { None } else { Some(css) },
-        title,
-        nodes,
-    }
+    PageFile { script, module_script: page.page.module_script.clone(), style: if css.trim().is_empty() { None } else { Some(css) }, title, nodes }
 }
 
 fn first_slot(nodes: &[Node]) -> Option<usize> {
@@ -479,7 +576,7 @@ fn slot_positions_into(nodes: &[Node], out: &mut Vec<usize>) {
                     slot_positions_into(body, out);
                 }
             }
-            Node::Each { body, .. } | Node::Source { body, .. } => slot_positions_into(body, out),
+            Node::Each { body, .. } | Node::Source { body, .. } | Node::Use { children: body, .. } => slot_positions_into(body, out),
             Node::Text(_) | Node::Expr { .. } => {}
         }
     }
@@ -513,7 +610,7 @@ fn fill_slot(nodes: &mut Vec<Node>, child: &mut Option<Vec<Node>>) -> bool {
                 }
                 hit
             }
-            Node::Each { body, .. } | Node::Source { body, .. } => fill_slot(body, child),
+            Node::Each { body, .. } | Node::Source { body, .. } | Node::Use { children: body, .. } => fill_slot(body, child),
             _ => false,
         };
         if hit {
@@ -528,6 +625,11 @@ fn renumber(nodes: &mut [Node], next: &mut usize) {
     for n in nodes {
         match n {
             Node::Text(_) | Node::Slot { .. } => {}
+            Node::Use { id, children, .. } => {
+                *next += 1;
+                *id = *next;
+                renumber(children, next);
+            }
             Node::Expr { id, .. } => {
                 *next += 1;
                 *id = *next;
@@ -564,6 +666,23 @@ fn shift_nodes(nodes: &mut [Node], delta: usize) {
         match n {
             Node::Text(_) => {}
             Node::Slot { pos } => *pos += delta,
+            Node::Use { children, pos, attrs, .. } => {
+                *pos += delta;
+                for a in attrs {
+                    match &mut a.value {
+                        AttrValue::Handler { pos, .. } => *pos += delta,
+                        AttrValue::Parts(parts) => {
+                            for p in parts {
+                                if let Part::Expr(e) = p {
+                                    shift_expr(e, delta);
+                                }
+                            }
+                        }
+                        AttrValue::Bare | AttrValue::Static(_) => {}
+                    }
+                }
+                shift_nodes(children, delta);
+            }
             Node::Expr { expr, .. } => shift_expr(expr, delta),
             Node::Element(e) => {
                 for a in &mut e.attrs {

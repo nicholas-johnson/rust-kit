@@ -16,6 +16,7 @@
 //! ```
 
 mod codegen;
+mod component;
 mod expr;
 mod parse;
 mod route;
@@ -74,12 +75,7 @@ impl Diag {
         let line_end = src[pos..].find('\n').map_or(src.len(), |i| pos + i);
         let col = src[line_start..pos].chars().count() + 1;
         let gutter = " ".repeat(line_no.to_string().len());
-        let mut s = format!(
-            "error: {}\n{gutter}--> {file}:{line_no}:{col}\n{gutter} |\n{line_no} | {}\n{gutter} | {}^\n",
-            self.msg,
-            &src[line_start..line_end],
-            " ".repeat(col - 1)
-        );
+        let mut s = format!("error: {}\n{gutter}--> {file}:{line_no}:{col}\n{gutter} |\n{line_no} | {}\n{gutter} | {}^\n", self.msg, &src[line_start..line_end], " ".repeat(col - 1));
         if let Some(h) = &self.help {
             let _ = writeln!(s, "{gutter} = help: {h}");
         }
@@ -100,14 +96,7 @@ pub struct CompiledPage {
 pub fn compile_page(src: &str, opts: &Options) -> Result<CompiledPage, Diag> {
     let page = parse::parse(src)?;
     let out = codegen::generate(&page, opts)?;
-    Ok(CompiledPage {
-        rust: out.rust,
-        js: out.js,
-        css: out.css,
-        prerender: out.prerender,
-        server_sources: out.server_sources,
-        client_sources: out.client_sources,
-    })
+    Ok(CompiledPage { rust: out.rust, js: out.js, css: out.css, prerender: out.prerender, server_sources: out.server_sources, client_sources: out.client_sources })
 }
 
 pub struct Config {
@@ -148,10 +137,10 @@ fn hash(s: &str) -> String {
 /// in their directory; they are not routes.
 pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
     let prepared = route::prepare(&cfg.routes_dir)?;
-    let opts = Options {
-        state_type: &cfg.state_type,
-        sources_module: &cfg.sources_module,
-    };
+    for path in &prepared.component_files {
+        println!("cargo:rerun-if-changed={}", path.display());
+    }
+    let opts = Options { state_type: &cfg.state_type, sources_module: &cfg.sources_module };
     let asset_dir = cfg.out_dir.join("rk_assets");
     fs::create_dir_all(&asset_dir).map_err(|e| e.to_string())?;
 
@@ -215,22 +204,13 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
             css_urls, js_url, page.rust
         );
         let param = file.param.as_deref();
-        let _ = writeln!(
-            routes,
-            "::rustkit::Route {{ path: {path:?}, param: {param:?}, prerender: {}, render: page_{stem}::render_boxed, js_bytes: {js_bytes}, css_bytes: {css_bytes} }},",
-            page.prerender
-        );
+        let _ = writeln!(routes, "::rustkit::Route {{ path: {path:?}, param: {param:?}, prerender: {}, render: page_{stem}::render_boxed, js_bytes: {js_bytes}, css_bytes: {css_bytes} }},", page.prerender);
         for s in page.client_sources {
             if !client_sources.contains(&s) {
                 client_sources.push(s);
             }
         }
-        summaries.push(RouteSummary {
-            path,
-            prerender: page.prerender,
-            js_bytes,
-            css_bytes,
-        });
+        summaries.push(RouteSummary { path, prerender: page.prerender, js_bytes, css_bytes });
     }
     if !errors.is_empty() {
         return Err(errors);
@@ -256,23 +236,14 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
                 "        {s:?} => {{\n            let Some(__p) = params.iter().find(|(k, _)| *k == {param:?}).map(|(_, v)| *v).filter(|v| !v.is_empty()) else {{\n                return Some(Box::pin(async {{ Err(::rustkit::Error::BadRequest(\"missing route parameter `{param}`\".into())) }}));\n            }};\n            Some(Box::pin(async move {{ let v = {sm}::{s}(ctx, __p).await?; Ok(::rustkit::__private::serde_json::to_value(&v)?) }}))\n        }}"
             );
         } else {
-            let _ = writeln!(
-                out,
-                "        {s:?} => Some(Box::pin(async move {{ let v = {sm}::{s}(ctx).await?; Ok(::rustkit::__private::serde_json::to_value(&v)?) }})),"
-            );
+            let _ = writeln!(out, "        {s:?} => Some(Box::pin(async move {{ let v = {sm}::{s}(ctx).await?; Ok(::rustkit::__private::serde_json::to_value(&v)?) }})),");
         }
     }
     out.push_str("        _ => { let _ = params; None }\n    }\n}\n\n");
-    let _ = writeln!(
-        out,
-        "pub fn manifest() -> ::rustkit::Manifest<{st}> {{\n    ::rustkit::Manifest {{\n        routes: vec![\n{routes}        ],\n        assets: vec!["
-    );
+    let _ = writeln!(out, "pub fn manifest() -> ::rustkit::Manifest<{st}> {{\n    ::rustkit::Manifest {{\n        routes: vec![\n{routes}        ],\n        assets: vec![");
     for (name, ct, body) in &assets {
         fs::write(asset_dir.join(name), body).map_err(|e| e.to_string())?;
-        let _ = writeln!(
-            out,
-            "            ::rustkit::Asset {{ path: \"/_rk/assets/{name}\", content_type: {ct:?}, body: include_str!(concat!(env!(\"OUT_DIR\"), \"/rk_assets/{name}\")) }},"
-        );
+        let _ = writeln!(out, "            ::rustkit::Asset {{ path: \"/_rk/assets/{name}\", content_type: {ct:?}, body: include_str!(concat!(env!(\"OUT_DIR\"), \"/rk_assets/{name}\")) }},");
     }
     out.push_str("        ],\n        client_sources: CLIENT_SOURCES,\n        source_api,\n    }\n}\n");
     fs::write(cfg.out_dir.join("rustkit_generated.rs"), out).map_err(|e| e.to_string())?;
@@ -325,6 +296,7 @@ impl Build {
     pub fn run(self) {
         let crate_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("run from build.rs"));
         println!("cargo:rerun-if-changed=src/routes");
+        println!("cargo:rerun-if-changed=src/lib");
         println!("cargo:rerun-if-env-changed=RUSTKIT_DEV");
         if let Some(tw) = &self.tailwind {
             println!("cargo:rerun-if-env-changed={TAILWIND_ENV}");

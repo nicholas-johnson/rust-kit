@@ -53,7 +53,7 @@ Scoped styles are not available yet. If you need isolation within a page, use a 
 
 ## Sharing styles between pages
 
-A [`layout.rk`](/docs/pages-and-routes/#layouts) `<style>` is concatenated ahead of each wrapped page's `<style>`, in one hashed file per page, so the page's rules win. A page cannot import another CSS file through the compiler, and there is no single stylesheet URL shared across pages. Your options today:
+A [`layout.rk`](/docs/pages-and-routes/#layouts) `<style>` is concatenated ahead of each wrapped page's `<style>`, in one hashed file per page, so the page's rules win. A [component's](/docs/pages-and-routes/#components) `<style>` is concatenated ahead of the file that imports it, nested components first. The same component's CSS is included once per page. There is still no single stylesheet URL shared across pages, and styles are not scoped to the component. Your options today:
 
 - **Repeat the shared rules in each page's `<style>`.** The bundled demo does this for its navigation and base typography. Each page's CSS file is cached separately, so the cost is a little duplicated download, not a slower page.
 - **Add a stylesheet link by hand.** You cannot add to `<head>`, but a `<link rel="stylesheet">` in the template body works in every current browser. You would serve that file yourself, for example with an extra axum route.

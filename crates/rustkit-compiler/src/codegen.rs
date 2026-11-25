@@ -70,6 +70,8 @@ struct Gen<'a> {
     param_sources: &'a BTreeSet<String>,
     /// A browser block or handler reads the route parameter.
     param_in_js: bool,
+    /// Component imports that were not inlined (snippet compilation).
+    components: Vec<script::ComponentImport>,
 }
 
 pub fn generate(page: &PageFile, opts: &Options) -> Result<PageOutput, Diag> {
@@ -82,11 +84,7 @@ pub fn generate(page: &PageFile, opts: &Options) -> Result<PageOutput, Diag> {
 pub(crate) fn generate_routed(page: &PageFile, opts: &Options, param: Option<&str>, param_sources: &BTreeSet<String>) -> Result<PageOutput, Diag> {
     let script = match &page.script {
         Some((src, pos)) => script::parse(src, *pos)?,
-        None => Script {
-            sources: vec![],
-            state: vec![],
-            rest: String::new(),
-        },
+        None => Script { sources: vec![], components: vec![], state: vec![], rest: String::new() },
     };
     if let Some(name) = param {
         if let Some((src, base)) = &page.script {
@@ -115,6 +113,7 @@ pub(crate) fn generate_routed(page: &PageFile, opts: &Options, param: Option<&st
         param,
         param_sources,
         param_in_js: false,
+        components: script.components.clone(),
     };
 
     let mut scope = Vec::new();
@@ -131,14 +130,7 @@ pub(crate) fn generate_routed(page: &PageFile, opts: &Options, param: Option<&st
     let title = page.title.clone().unwrap_or_default();
     let rust = g.rust_module(&body, needs_js, &title);
     let js = needs_js.then(|| g.js_module(&user_js));
-    Ok(PageOutput {
-        rust,
-        js,
-        css: page.style.clone().filter(|s| !s.trim().is_empty()),
-        prerender,
-        server_sources: g.server_sources.clone(),
-        client_sources: g.client_sources.iter().cloned().collect(),
-    })
+    Ok(PageOutput { rust, js, css: page.style.clone().filter(|s| !s.trim().is_empty()), prerender, server_sources: g.server_sources.clone(), client_sources: g.client_sources.iter().cloned().collect() })
 }
 
 fn lookup<'s>(scope: &'s Scope, name: &str) -> Option<&'s Binding> {
@@ -259,7 +251,7 @@ impl Gen<'_> {
     fn is_dynamic(&self, node: &Node, scope: &Scope) -> bool {
         match node {
             Node::Source { load: Load::Client, .. } => true,
-            Node::Slot { .. } | Node::Source { .. } | Node::Text(_) => false,
+            Node::Slot { .. } | Node::Source { .. } | Node::Text(_) | Node::Use { .. } => false,
             n => Self::own_exprs(n).iter().any(|e| self.uses_state(e, scope)),
         }
     }
@@ -268,20 +260,30 @@ impl Gen<'_> {
         match node {
             Node::Expr { id, .. } | Node::If { id, .. } | Node::Each { id, .. } | Node::Source { id, .. } => *id,
             Node::Element(e) => e.id,
+            Node::Use { id, .. } => *id,
             Node::Text(_) | Node::Slot { .. } => unreachable!(),
         }
     }
 
     fn check_source(&self, name: &str, pos: usize) -> Result<(), Diag> {
-        if self.imported.iter().any(|s| s == name) {
-            Ok(())
-        } else {
-            Err(Diag::new(pos, format!("`{name}` is not imported from \"$sources\"")).help(format!("add `import {{ {name} }} from \"$sources\";` to the page script")))
-        }
+        if self.imported.iter().any(|s| s == name) { Ok(()) } else { Err(Diag::new(pos, format!("`{name}` is not imported from \"$sources\"")).help(format!("add `import {{ {name} }} from \"$sources\";` to the page script"))) }
     }
 
     fn unknown(&self, name: &str, pos: usize) -> Diag {
         Diag::new(pos, format!("`{name}` is not defined here")).help("template expressions can read `$state` variables, a `<DataSource let:…>` binding, an `{#each}` item, or the route's `[param]`")
+    }
+
+    fn unknown_component(&self, name: &str, pos: usize) -> Diag {
+        if let Some(c) = self.components.iter().find(|c| c.name == name) {
+            return Diag::new(pos, format!("`{name}` is imported from `{}`, which is not loaded here", c.spec)).help("component files are read when compiling a routes directory");
+        }
+        let help = if self.components.is_empty() {
+            format!("add `import {name} from \"$lib/{name}.rk\"` on its own line")
+        } else {
+            let known: Vec<&str> = self.components.iter().map(|c| c.name.as_str()).collect();
+            format!("this file imports {}. Add `import {name} from \"$lib/{name}.rk\"`, or use one of those tags", known.join(", "))
+        };
+        Diag::new(pos, format!("unknown component `<{name}>`")).help(help)
     }
 
     fn source_call(&self, name: &str) -> String {
@@ -364,7 +366,10 @@ impl Gen<'_> {
             return Ok(());
         }
         if let Node::Slot { pos } = node {
-            return Err(Diag::new(*pos, "`<slot>` is only valid in `layout.rk`"));
+            return Err(Diag::new(*pos, "`<slot>` belongs in `layout.rk` or a component"));
+        }
+        if let Node::Use { name, pos, .. } = node {
+            return Err(self.unknown_component(name, *pos));
         }
         if !self.is_dynamic(node, scope) {
             return self.rs_inner(node, scope, out);
@@ -380,7 +385,7 @@ impl Gen<'_> {
     /// Renders a node's initial HTML, ignoring whether the node itself is a block.
     fn rs_inner(&mut self, node: &Node, scope: &Scope, out: &mut String) -> Result<(), Diag> {
         match node {
-            Node::Text(_) | Node::Slot { .. } => unreachable!(),
+            Node::Text(_) | Node::Slot { .. } | Node::Use { .. } => unreachable!(),
             Node::Expr { expr, .. } => {
                 let _ = writeln!(out, "::rustkit::js::text(&mut out, &{});", self.rs_val(expr, scope)?);
             }
@@ -423,14 +428,7 @@ impl Gen<'_> {
                 self.rs_nodes(body, &inner, out)?;
                 out.push_str("}\n");
             }
-            Node::Source {
-                source,
-                load: Load::Server,
-                bind,
-                body,
-                pos,
-                ..
-            } => {
+            Node::Source { source, load: Load::Server, bind, body, pos, .. } => {
                 self.check_source(source, *pos)?;
                 if !self.server_sources.contains(source) {
                     self.server_sources.push(source.clone());
@@ -522,6 +520,28 @@ impl Gen<'_> {
         for node in nodes {
             match node {
                 Node::Text(_) | Node::Slot { .. } => {}
+                Node::Use { attrs, children, .. } => {
+                    for a in attrs {
+                        match &a.value {
+                            AttrValue::Parts(parts) => {
+                                for p in parts {
+                                    if let Part::Expr(x) = p {
+                                        push_expr(x, bound, out);
+                                    }
+                                }
+                            }
+                            AttrValue::Handler { js, pos } => {
+                                for u in script::idents(js) {
+                                    if !u.is_property && !bound.contains(&u.name) {
+                                        out.push((u.name, u.field, *pos));
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    self.free_refs(&children.iter().collect::<Vec<_>>(), bound, out);
+                }
                 Node::Expr { expr, .. } => push_expr(expr, bound, out),
                 Node::Element(e) => {
                     for a in &e.attrs {
@@ -666,11 +686,7 @@ impl Gen<'_> {
                 names.push(n);
             }
         }
-        if names.is_empty() {
-            String::new()
-        } else {
-            format!("const {{ {} }} = {cvar}; ", names.join(", "))
-        }
+        if names.is_empty() { String::new() } else { format!("const {{ {} }} = {cvar}; ", names.join(", ")) }
     }
 
     /// Registers the browser render function for a block and returns its key.
@@ -682,34 +698,18 @@ impl Gen<'_> {
         self.blocks.insert(key.clone(), String::new());
         let mut body = String::new();
         let entry = match node {
-            Node::Source {
-                source,
-                load: Load::Client,
-                bind,
-                body: children,
-                pos,
-                ..
-            } => {
+            Node::Source { source, load: Load::Client, bind, body: children, pos, .. } => {
                 self.check_source(source, *pos)?;
                 self.client_sources.insert(source.clone());
                 let mut inner = scope.clone();
                 inner.push((bind.clone(), Binding::ClientSource(source.clone())));
                 self.js_nodes(children, &inner, "c", &mut body)?;
-                format!(
-                    "{{ deps: [], source: {}, bind: {}, render: (c, r) => {{ {}let h = \"\";\n{body}return h; }} }}",
-                    js_str(source),
-                    js_str(bind),
-                    Self::destructure(&inner, "c")
-                )
+                format!("{{ deps: [], source: {}, bind: {}, render: (c, r) => {{ {}let h = \"\";\n{body}return h; }} }}", js_str(source), js_str(bind), Self::destructure(&inner, "c"))
             }
             _ => {
                 let deps = self.state_deps(&Self::own_exprs(node), scope);
                 self.js_inner(node, scope, "c", &mut body)?;
-                format!(
-                    "{{ deps: [{}], render: (c, r) => {{ {}let h = \"\";\n{body}return h; }} }}",
-                    deps.iter().map(|d| js_str(d)).collect::<Vec<_>>().join(", "),
-                    Self::destructure(scope, "c")
-                )
+                format!("{{ deps: [{}], render: (c, r) => {{ {}let h = \"\";\n{body}return h; }} }}", deps.iter().map(|d| js_str(d)).collect::<Vec<_>>().join(", "), Self::destructure(scope, "c"))
             }
         };
         self.blocks.insert(key.clone(), entry);
@@ -743,11 +743,15 @@ impl Gen<'_> {
             return Ok(());
         }
         if let Node::Slot { pos } = node {
-            return Err(Diag::new(*pos, "`<slot>` is only valid in `layout.rk`"));
+            return Err(Diag::new(*pos, "`<slot>` belongs in `layout.rk` or a component"));
+        }
+        if let Node::Use { name, pos, .. } = node {
+            return Err(self.unknown_component(name, *pos));
         }
         if let Node::Source { load: Load::Server, pos, .. } = node {
-            return Err(Diag::new(*pos, "a `load=\"server\"` source cannot appear inside a region the browser renders")
-                .help("this region depends on browser state, so it may first appear after the HTTP response; use `load=\"client\"` here"));
+            return Err(
+                Diag::new(*pos, "a `load=\"server\"` source cannot appear inside a region the browser renders").help("this region depends on browser state, so it may first appear after the HTTP response; use `load=\"client\"` here")
+            );
         }
         if self.is_dynamic(node, scope) {
             let key = self.js_block(node, scope)?;
@@ -759,7 +763,9 @@ impl Gen<'_> {
 
     fn js_inner(&mut self, node: &Node, scope: &Scope, cvar: &str, out: &mut String) -> Result<(), Diag> {
         match node {
-            Node::Text(_) | Node::Source { .. } | Node::Slot { .. } => unreachable!(),
+            Node::Text(_) | Node::Source { .. } | Node::Slot { .. } | Node::Use { .. } => {
+                unreachable!()
+            }
             Node::Expr { expr, .. } => {
                 let _ = writeln!(out, "h += r.esc({});", self.js_val(expr, scope)?);
             }
@@ -858,10 +864,7 @@ impl Gen<'_> {
             let ident = raw_ident(name);
             let _ = writeln!(out, "pub struct Params {{\n    pub {ident}: ::std::string::String,\n}}\n");
         }
-        let _ = writeln!(
-            out,
-            "pub async fn render(ctx: &::rustkit::RequestContext<{st}>, __param: Option<&str>) -> ::std::result::Result<::rustkit::Page, ::rustkit::Error> {{"
-        );
+        let _ = writeln!(out, "pub async fn render(ctx: &::rustkit::RequestContext<{st}>, __param: Option<&str>) -> ::std::result::Result<::rustkit::Page, ::rustkit::Error> {{");
         if let Some(name) = self.param {
             let ident = raw_ident(name);
             let _ = writeln!(out, "let params = Params {{ {ident}: __param.expect(\"route param\").to_owned() }};");
@@ -903,11 +906,7 @@ impl Gen<'_> {
             if param_payload {
                 let name = self.param.unwrap();
                 let ident = raw_ident(name);
-                let _ = writeln!(
-                    out,
-                    "p.insert(\"params\".into(), {{ let mut m = Map::new(); m.insert({}.into(), Value::String(params.{ident}.clone())); Value::Object(m) }});",
-                    rs_str(name)
-                );
+                let _ = writeln!(out, "p.insert(\"params\".into(), {{ let mut m = Map::new(); m.insert({}.into(), Value::String(params.{ident}.clone())); Value::Object(m) }});", rs_str(name));
             }
             out.push_str("Some(::rustkit::js::html_safe_json(&Value::Object(p)))\n};\n");
         } else {

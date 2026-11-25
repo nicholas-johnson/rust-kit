@@ -7,7 +7,7 @@ order: 3
 
 ## Is Rust-kit ready for production?
 
-Not yet, for most teams. Version 0.1 is the first milestone of a [design proposal](/docs/design/). The code is tested and its security defaults are deliberate, but sessions live in memory, there are no components, a route can take only one parameter, and the crates are not on crates.io. Use it to evaluate the model, build internal tools, or contribute. The [roadmap](/docs/roadmap/) lists every gap.
+Not yet, for most teams. Version 0.1 is the first milestone of a [design proposal](/docs/design/). The code is tested and its security defaults are deliberate, but sessions live in memory, a component's `$state` is shared by every use on the page, a route can take only one parameter, and the crates are not on crates.io. Use it to evaluate the model, build internal tools, or contribute. The [roadmap](/docs/roadmap/) lists every gap.
 
 ## Do I need Node.js or a bundler?
 
@@ -64,7 +64,7 @@ Not in this release. Page scripts and handlers are copied into the browser modul
 
 ## Can I import npm packages or other modules in a page script?
 
-No. Only `import { … } from "$sources"` is understood. Other imports are not resolved or bundled.
+No. `import { … } from "$sources"` names a data source, and `import Name from "$lib/….rk"` inlines a [component](/docs/pages-and-routes/#components). Other imports are not resolved or bundled.
 
 ## Why are arrays not allowed in `$state`?
 

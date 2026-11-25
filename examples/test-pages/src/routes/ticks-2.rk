@@ -1,0 +1,15 @@
+<script>
+  import Ticks from "$lib/TicksTwo.rk";
+</script>
+
+<title>Ticks</title>
+
+<p><a href="/">← All pages</a></p>
+<Ticks />
+
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

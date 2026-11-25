@@ -49,7 +49,7 @@ Write HTML elements as usual. Tag names starting with a lowercase letter are emi
 - **Void elements** (`area`, `base`, `br`, `col`, `embed`, `hr`, `img`, `input`, `link`, `meta`, `source`, `track`, `wbr`) need no closing tag. `<br>` and `<br />` are equivalent.
 - **Self-closing syntax on other elements** is accepted and produces an empty element: `<div />` renders `<div></div>`.
 - **Every other element must be closed**, and closing tags must match: `` `</span>` does not match `<p>` `` is a compile error. The compiler does not apply HTML's implicit closing rules, so close your `<p>` and `<li>` tags.
-- **Tags starting with an uppercase letter are components.** The only one available is `<DataSource>`; anything else is an error.
+- **Tags starting with an uppercase letter are components.** `<DataSource>` is built in. Any other name is a component you [import](/docs/pages-and-routes/#components). A capitalised tag with no matching import is `` unknown component `<Card>` ``.
 
 ## Attributes
 
@@ -202,13 +202,13 @@ These are compile errors or are not recognised in this release:
 | Construct | Status |
 | --- | --- |
 | `{@html …}`, `{#await}`, `{#key}`, other `{#…}` blocks | Compile error: unknown block |
-| Components other than `<DataSource>` | Compile error: unknown component |
+| Default props, event handlers on a component tag, per-instance `$state` | Not available. Two uses of a component share its `$state`. See [Components](/docs/pages-and-routes/#components) |
 | Function and method calls in `{…}` | Compile error; see [Expressions](/docs/expressions/) |
 | `{#each}` over `$state` | Compile error |
 | `class:`, `bind:`, `use:` directives, spread attributes | Not recognised |
-| `<slot />` outside `layout.rk`, `<svelte:head>`-style head content | `<slot />` belongs in [`layout.rk`](/docs/pages-and-routes/#layouts). Extra head content is not available |
+| `<slot />` in a page, `<svelte:head>`-style head content | `<slot />` belongs in [`layout.rk`](/docs/pages-and-routes/#layouts) or a component. Extra head content is not available |
 
-For example, a component import fails like this:
+A capitalised tag with no matching import fails:
 
 ```rk title=card.rk fail
 <h1>Products</h1>

@@ -39,8 +39,16 @@ pub enum Node {
         body: Vec<Node>,
         pos: usize,
     },
-    /// `<slot>` in a `layout.rk`. Replaced with the wrapped page when routes are composed.
+    /// `<slot>` in a `layout.rk` or a component. Replaced when routes are composed.
     Slot {
+        pos: usize,
+    },
+    /// An imported component, `<Header …>`. Inlined when routes are compiled.
+    Use {
+        id: usize,
+        name: String,
+        attrs: Vec<Attr>,
+        children: Vec<Node>,
         pos: usize,
     },
 }
@@ -107,13 +115,7 @@ struct Parser<'a> {
 }
 
 pub fn parse(src: &str) -> Result<PageFile, Diag> {
-    let mut p = Parser {
-        src,
-        i: 0,
-        next_id: 0,
-        depth: 0,
-        page: PageFile::default(),
-    };
+    let mut p = Parser { src, i: 0, next_id: 0, depth: 0, page: PageFile::default() };
     let (nodes, stop) = p.nodes()?;
     match stop {
         Stop::Eof => {}
@@ -198,10 +200,7 @@ impl<'a> Parser<'a> {
                     return Err(Diag::new(pos, format!("unknown block `{{{t}}}`")));
                 } else {
                     let id = self.id();
-                    nodes.push(Node::Expr {
-                        id,
-                        expr: expr::parse(&inner, inner_pos)?,
-                    });
+                    nodes.push(Node::Expr { id, expr: expr::parse(&inner, inner_pos)? });
                 }
             } else {
                 let end = r.find(['<', '{']).unwrap_or(r.len());
@@ -300,6 +299,7 @@ impl<'a> Parser<'a> {
         let tag = r[..name_len].to_owned();
         self.i += name_len;
 
+        let component = tag.starts_with(|c: char| c.is_ascii_uppercase());
         let mut attrs = Vec::new();
         let self_closing;
         loop {
@@ -318,7 +318,7 @@ impl<'a> Parser<'a> {
             if r.is_empty() {
                 return Err(Diag::new(pos, format!("unterminated `<{tag}>`")));
             }
-            attrs.push(self.attr()?);
+            attrs.push(self.attr(component)?);
         }
 
         if (tag == "script" || tag == "style") && !self_closing {
@@ -367,11 +367,11 @@ impl<'a> Parser<'a> {
                 return Err(Diag::new(pos, "`<slot>` takes no attributes"));
             }
             if !children.is_empty() {
-                return Err(Diag::new(pos, "`<slot>` cannot wrap content").help("the layout's `<slot>` is where the page is rendered"));
+                return Err(Diag::new(pos, "`<slot>` cannot wrap content").help("a `<slot>` is where a layout's page, or a component's children, are rendered"));
             }
             return Ok(Some(Node::Slot { pos }));
         }
-        if tag.starts_with(|c: char| c.is_ascii_uppercase()) {
+        if component {
             return self.component(tag, attrs, children, pos).map(Some);
         }
         let id = self.id();
@@ -380,7 +380,8 @@ impl<'a> Parser<'a> {
 
     fn component(&mut self, tag: String, attrs: Vec<Attr>, body: Vec<Node>, pos: usize) -> Result<Node, Diag> {
         if tag != "DataSource" {
-            return Err(Diag::new(pos, format!("unknown component `<{tag}>`")).help("the first release has one built-in component, `<DataSource>`"));
+            let id = self.id();
+            return Ok(Node::Use { id, name: tag, attrs, children: body, pos });
         }
         let mut source = None;
         let mut load = None;
@@ -415,7 +416,7 @@ impl<'a> Parser<'a> {
         Ok(Node::Source { id, source, load, bind, body, pos })
     }
 
-    fn attr(&mut self) -> Result<Attr, Diag> {
+    fn attr(&mut self, component: bool) -> Result<Attr, Diag> {
         let pos = self.i;
         let r = self.rest();
         let len = r.find(|c: char| c.is_whitespace() || c == '=' || c == '>' || c == '/').unwrap_or(r.len());
@@ -424,7 +425,7 @@ impl<'a> Parser<'a> {
         }
         let name = r[..len].to_owned();
         self.i += len;
-        let is_handler = name.len() > 2 && name.starts_with("on");
+        let is_handler = is_event_name(&name, component);
         if !self.rest().starts_with('=') {
             return Ok(Attr { name, value: AttrValue::Bare });
         }
@@ -432,11 +433,7 @@ impl<'a> Parser<'a> {
         let r = self.rest();
         let value = if r.starts_with('{') {
             let (inner, p) = self.braced()?;
-            if is_handler {
-                AttrValue::Handler { js: inner, pos: p }
-            } else {
-                AttrValue::Parts(vec![Part::Expr(expr::parse(&inner, p)?)])
-            }
+            if is_handler { AttrValue::Handler { js: inner, pos: p } } else { AttrValue::Parts(vec![Part::Expr(expr::parse(&inner, p)?)]) }
         } else if let Some(q) = r.chars().next().filter(|c| *c == '"' || *c == '\'') {
             let end = r[1..].find(q).ok_or_else(|| Diag::new(pos, "unterminated attribute value"))?;
             let raw = r[1..=end].to_owned();
@@ -479,6 +476,46 @@ fn split_parts(raw: &str, base: usize) -> Result<Vec<Part>, Diag> {
         }
     }
     Ok(parts)
+}
+
+/// HTML keeps the historical rule: any `on…` attribute is a handler.
+/// Component tags only treat well-known events that way, so a prop can be
+/// named `open`.
+fn is_event_name(name: &str, component: bool) -> bool {
+    if name.len() <= 2 || !name.starts_with("on") {
+        return false;
+    }
+    if !component {
+        return true;
+    }
+    const EVENTS: &[&str] = &[
+        "onclick",
+        "ondblclick",
+        "oninput",
+        "onchange",
+        "onsubmit",
+        "onreset",
+        "oninvalid",
+        "onkeydown",
+        "onkeyup",
+        "onkeypress",
+        "onfocus",
+        "onblur",
+        "onmouseenter",
+        "onmouseleave",
+        "onmouseover",
+        "onmouseout",
+        "onmousedown",
+        "onmouseup",
+        "onpointerdown",
+        "onpointerup",
+        "oncontextmenu",
+        "onscroll",
+        "onwheel",
+        "ondragstart",
+        "ondrop",
+    ];
+    EVENTS.contains(&name)
 }
 
 pub fn is_ident(s: &str) -> bool {

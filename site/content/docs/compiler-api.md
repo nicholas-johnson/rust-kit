@@ -37,7 +37,7 @@ It fixes every setting by convention:
 | State type | `crate::AppState` |
 | Sources module | `crate::sources` |
 
-It prints `cargo:rerun-if-changed=src/routes`, so Cargo reruns it when a page changes. On failure it prints every diagnostic to stderr and exits with status 1, which fails the build. It panics if `CARGO_MANIFEST_DIR` or `OUT_DIR` is unset, which means it only works when Cargo runs it as a build script.
+It prints `cargo:rerun-if-changed=src/routes` and `cargo:rerun-if-changed=src/lib`, and one line for each component file it read, so Cargo reruns it when a page or a component changes. On failure it prints every diagnostic to stderr and exits with status 1, which fails the build. It panics if `CARGO_MANIFEST_DIR` or `OUT_DIR` is unset, which means it only works when Cargo runs it as a build script.
 
 ## compile and Config
 
@@ -68,6 +68,7 @@ fn main() {
         sources_module: "crate::data::sources".into(),
     };
     println!("cargo:rerun-if-changed=src/routes");
+    println!("cargo:rerun-if-changed=src/lib");
     if let Err(diagnostics) = rustkit_compiler::compile(&cfg) {
         eprintln!("{diagnostics}");
         std::process::exit(1);
@@ -75,10 +76,10 @@ fn main() {
 }
 ```
 
-`compile` does not print `rerun-if-changed` itself; add the line as above. It compiles every page it finds, sorted by path. If any page fails, it returns `Err` with the rendered diagnostics for every failing page joined together, and writes no Rust file. Other errors, such as a missing routes directory, come back as `reading <path>: <io error>`.
+`compile` prints `cargo:rerun-if-changed` for each component file it read. It does not print the directory lines; add those as above. It compiles every page it finds, sorted by path. If any page fails, it returns `Err` with the rendered diagnostics for every failing page joined together, and writes no Rust file. Other errors, such as a missing routes directory, come back as `reading <path>: <io error>`.
 
 > [!NOTE]
-> Diagnostics always label files as `src/routes/<relative path>`, even when `routes_dir` points somewhere else.
+> Page diagnostics are labelled `src/routes/<relative path>`, even when `routes_dir` points somewhere else. A component file next to that routes directory is labelled `src/lib/…`.
 
 ### RouteSummary
 

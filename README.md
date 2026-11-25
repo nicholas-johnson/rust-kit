@@ -23,7 +23,8 @@ site                      generator for rust-kit.com (docs, tutorials, landing p
 `examples/test-pages` has a small page for each feature: escaping,
 number formatting, attributes, truthiness, comparisons (including UTF-16 string
 order), loops, state, nested blocks, the handoff payload, client loading and
-forms, plus a blog with nested layouts and a `[slug]` segment. Browse them with:
+forms, plus a blog with nested layouts and a `[slug]` segment, and shared
+components imported from `src/lib`. Browse them with:
 
 ```bash
 cargo run -p test-pages
@@ -162,8 +163,9 @@ that stylesheet before its own `<style>` block, so page styles still win.
   `src/tailwind.css` that writes `@import "tailwindcss"` needs the CLI
   installed in the crate, or the standalone CLI.
 - **Input**: with no `src/tailwind.css`, the build uses
-  `@import "tailwindcss" source(none); @source "./src/routes";`. Add
-  `src/tailwind.css` to use `@theme`, plugins, or more `@source` paths.
+  `@import "tailwindcss" source(none); @source "./src/routes";`, and adds
+  `@source "./src/lib";` when that directory exists. Add `src/tailwind.css`
+  to use `@theme`, plugins, or more `@source` paths.
 - Class names must appear whole in the template, as Tailwind requires. Use
   `"bg-red-500"`, not `"bg-" + color`.
 
@@ -241,13 +243,48 @@ same segment. A source also imported from a fixed path stays `(ctx)`; mixing
 the two is a compile error. One `[param]` per route. A dynamic page cannot be
 prerendered.
 
+### Components
+
+A page or a layout imports a shared `.rk` file and renders it by name:
+
+```rk
+<script>
+  import Header from "$lib/Header.rk";
+  import Card from "$lib/Card.rk";
+</script>
+
+<Header label="Notes" />
+<Card title="Today">
+  <p>Three things.</p>
+</Card>
+```
+
+`$lib` is `src/lib`, the directory next to `src/routes`. A relative path ending
+in `.rk` works from the importing file, which is how one component imports
+another. The import is one line. The name starts with an uppercase letter, and
+that name is the tag.
+
+The compiler inlines the component, the same way it inlines a layout. Rust and
+the browser walk one tree. The component's `$state`, its `$sources` imports and
+the rest of its script are merged into the page once, so two uses share that
+`$state`. Its `<style>` is concatenated ahead of the importer's, nested
+components first. Layout composition still puts the outer layout first and the
+page last, so the page's rules win.
+
+A prop is a name the component template reads. It is required, and it is a
+static string or one `{expr}`. There are no defaults and no event handlers on
+the tag. One `<slot />` receives the tag's children, which stay in the parent's
+scope. A component cannot set `<title>` or `prerender`. A source imported by a
+component follows the pages that use it, under the same one-parameter rule.
+
 ## Not in this milestone
 
 - **Upstream service**: the accounts service is an in-memory stand-in with
   latency and call counters. A real HTTP client would replace
   `examples/account-demo/src/upstream.rs` and nothing else.
-- **Script parsing**: `<script>` is parsed line by line. `import … from "$sources"`
-  and `let x = $state(literal)` must each be on their own line.
+- **Script parsing**: `<script>` is parsed line by line. `import … from "$sources"`,
+  `import Name from "$lib/….rk"` (or a relative `.rk` path), and
+  `let x = $state(literal)` must each be on their own line.
 - **State**: only primitive literals (string, number, boolean, null), so no
   arrays. `{#each}` over state is diagnosed.
 - **Granularity**: an update re-renders a whole block. There are no
@@ -258,8 +295,11 @@ prerendered.
 - **Sources**: the only input a resolver can take is the route's one parameter.
   There is no query string, no argument from the page, and no client refresh.
   A failed client load shows a Retry button.
+- **Components**: a page or a layout can import one. Two uses share its
+  `$state`. Props have no defaults and no fields. The tag takes no event
+  handlers. Styles are not scoped. See [Components](#components) above.
 - **Not built yet**: CSS scoping, rest parameters (`[...slug]`), optional
   segments (`[[slug]]`), more than one `[param]` per route, content
-  collections, persistent session storage, and component imports.
+  collections, and persistent session storage.
 - **Views**: they must serialize with `#[serde(rename_all = "camelCase")]` so
   that their JSON names match what templates read.
