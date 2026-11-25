@@ -47,7 +47,7 @@ A few details worth knowing:
 
 `<slot />` (or an empty `<slot></slot>`) is where the page is rendered. A layout needs exactly one. It takes no attributes and no fallback content. A `<slot>` in a page is a compile error. A component may have one `<slot />` for the tag's children; see [Components](#components).
 
-A layout may use the same template constructs as a page. Its `<style>` is concatenated ahead of the page's stylesheet, so the page's rules win. A `$state` name declared in a layout cannot be declared again in a nested layout or the page. `export const prerender = true` belongs on the page, not the layout.
+A layout may use the same template constructs as a page. Its `<style>` is concatenated ahead of the page's stylesheet and [scoped to the layout](/docs/styling/#styles-are-scoped-to-the-file). The page's rules win where both match the same element. A `$state` name declared in a layout cannot be declared again in a nested layout or the page. `export const prerender = true` belongs on the page, not the layout.
 
 The document `<title>` is the page's when it has one, otherwise the nearest layout's. Layouts wrap the body. They do not add `<meta>` tags or change `lang`.
 
@@ -89,7 +89,7 @@ What gets merged into the page, once per component file:
 - `$state` declarations. Two `<Card>` tags share that state. A `$state` name cannot also be declared in the page, a layout, or another component on the same page.
 - `import { … } from "$sources"` lines. A source imported by a component counts as an import from every page and layout that uses the component. The [one-parameter rule](#one-dynamic-segment) still applies.
 - Any other script, copied into the page module.
-- `<style>`, concatenated ahead of the importing file, nested components first. Layout composition still puts the outer layout first and the page last, so the page's rules win.
+- `<style>`, concatenated ahead of the importing file, nested components first, and [scoped to that file](/docs/styling/#styles-are-scoped-to-the-file). Layout composition still puts the outer layout first and the page last. Slot children stay in the parent's scope.
 
 A prop is a name the component's template reads. Every such name is required. Pass a static string (`title="Today"`) or one expression (`title={data.title}`). There are no defaults, no bare attributes, and no mixed strings. The tag does not take event handlers: write `onclick` inside the component. A prop has no fields; pass `name={data.name}` rather than reading `user.name` where `user` is the prop.
 

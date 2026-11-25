@@ -9,7 +9,7 @@ use common::*;
 async fn every_route_renders() {
     let app = test_pages::app(false);
     let paths: Vec<&str> = app.routes().iter().map(|r| r.path).collect();
-    assert_eq!(paths.len(), 26, "{paths:?}");
+    assert_eq!(paths.len(), 28, "{paths:?}");
     let router = app.into_router().await.unwrap();
     for path in paths {
         let url = located(path);
@@ -90,16 +90,16 @@ async fn floats_render_as_the_browser_will_receive_them() {
 #[tokio::test]
 async fn attributes_follow_the_boolean_and_escaping_rules() {
     let res = send(&router().await, get("/attributes", None)).await;
-    assert_eq!(res.tag("a-quoted"), r#"<input id="a-quoted" value="She said &quot;yes&quot; &amp; he said &#39;no&#39;">"#);
-    assert_eq!(res.tag("a-true"), r#"<input id="a-true" disabled>"#);
-    assert_eq!(res.tag("a-false"), r#"<input id="a-false">"#);
-    assert_eq!(res.tag("a-null"), r#"<input id="a-null">"#);
-    assert_eq!(res.tag("a-some"), r#"<input id="a-some" title="here">"#);
-    assert_eq!(res.tag("a-mixed"), r#"<p id="a-mixed" class="tag a tag-123456789">"#);
-    assert_eq!(res.tag("a-empty"), r#"<p id="a-empty" data-value="">"#);
-    assert_eq!(res.tag("a-number"), r#"<p id="a-number" data-value="0.30000000000000004">"#);
-    assert_eq!(res.tag("a-bare"), r#"<input id="a-bare" type="checkbox" checked>"#);
-    assert_eq!(res.tag("a-static"), r#"<p id="a-static" title="single &quot;quoted&quot;">"#);
+    assert_eq!(strip_scope(&res.tag("a-quoted")), r#"<input id="a-quoted" value="She said &quot;yes&quot; &amp; he said &#39;no&#39;">"#);
+    assert_eq!(strip_scope(&res.tag("a-true")), r#"<input id="a-true" disabled>"#);
+    assert_eq!(strip_scope(&res.tag("a-false")), r#"<input id="a-false">"#);
+    assert_eq!(strip_scope(&res.tag("a-null")), r#"<input id="a-null">"#);
+    assert_eq!(strip_scope(&res.tag("a-some")), r#"<input id="a-some" title="here">"#);
+    assert_eq!(strip_scope(&res.tag("a-mixed")), r#"<p id="a-mixed" class="tag a tag-123456789">"#);
+    assert_eq!(strip_scope(&res.tag("a-empty")), r#"<p id="a-empty" data-value="">"#);
+    assert_eq!(strip_scope(&res.tag("a-number")), r#"<p id="a-number" data-value="0.30000000000000004">"#);
+    assert_eq!(strip_scope(&res.tag("a-bare")), r#"<input id="a-bare" type="checkbox" checked>"#);
+    assert_eq!(strip_scope(&res.tag("a-static")), r#"<p id="a-static" title="single &quot;quoted&quot;">"#);
 }
 
 #[tokio::test]
@@ -146,7 +146,7 @@ async fn comparisons_match_javascript() {
 async fn loops_render_items_indexes_and_empty_lists() {
     let res = send(&router().await, get("/loops", None)).await;
     assert_eq!(res.inner("total"), "3 items");
-    let items = res.inner("items");
+    let items = strip_scope(&res.inner("items"));
     let a = items.find("0: Wrench &lt;M8&gt;, 12.5 (2 tags), note: Fits &quot;most&quot; nuts").expect("first item");
     let b = items.find("1: Rope &amp; pulley, 0.30000000000000004 (0 tags)").expect("second item");
     let c = items.find("2: Crab 🦀 figurine, 1e+21 (1 tags)").expect("third item, empty note is falsy");
@@ -171,7 +171,7 @@ async fn counter_renders_initial_state_and_blocks() {
 #[tokio::test]
 async fn only_fields_the_browser_reads_are_handed_off() {
     let res = send(&router().await, get("/toggle", None)).await;
-    assert!(res.body.contains("<h1>Toggle: café 🦀</h1>"));
+    assert!(strip_scope(&res.body).contains("<h1>Toggle: café 🦀</h1>"));
     assert!(!res.body.contains("id=\"details\""));
     let payload = res.payload().expect("toggle has a payload");
     let fields: Vec<&String> = payload["s"]["samples"].as_object().unwrap().keys().collect();
@@ -184,7 +184,7 @@ async fn branches_pick_the_initial_state() {
     let r = router().await;
     for (path, want) in [("/branches-0", "<p>zero</p>"), ("/branches-2", "<p>small: 2</p>"), ("/branches-5", "<p>big: 5</p>")] {
         let res = send(&r, get(path, None)).await;
-        assert!(strip_markers(&res.inner("out")).contains(want), "{path}");
+        assert!(strip_scope(&strip_markers(&res.inner("out"))).contains(want), "{path}");
     }
 }
 
@@ -192,7 +192,7 @@ async fn branches_pick_the_initial_state() {
 async fn client_loaded_list_starts_as_a_loading_region() {
     let r = router().await;
     let server = send(&r, get("/list-server", None)).await;
-    assert_eq!(server.inner("list").matches("<article>").count(), 3);
+    assert_eq!(strip_scope(&server.inner("list")).matches("<article>").count(), 3);
 
     let client = send(&r, get("/list-client", None)).await;
     assert!(!client.body.contains("<article>"));
@@ -291,7 +291,7 @@ async fn components_render_on_the_server() {
 
     let page = send(&r, get("/components", None)).await;
     assert_eq!(page.inner("app-header"), "A &amp; B");
-    assert!(page.inner("intro").contains("<h2>Hello</h2>"));
+    assert!(strip_scope(&page.inner("intro")).contains("<h2>Hello</h2>"));
     assert_eq!(page.inner("inside"), "A card body.");
     assert!(page.body.contains("id=\"note-form\""));
     assert!(page.body.contains("action=\"/form/echo\""));
@@ -305,6 +305,46 @@ async fn components_render_on_the_server() {
     let two = send(&r, get("/ticks-2", None)).await;
     assert_eq!(strip_markers(&two.inner("ticks")), "2");
     assert_eq!(strip_markers(&two.inner("tick-msg")), "ticked 2");
+}
+
+fn attr_in_tag(html: &str, id: &str, attr: &str) -> String {
+    let at = html.find(&format!("id=\"{id}\"")).unwrap_or_else(|| panic!("no element with id {id}"));
+    let start = html[..at].rfind('<').unwrap();
+    let end = at + html[at..].find('>').unwrap();
+    let tag = &html[start..=end];
+    let marker = format!("{attr}=\"");
+    let s = tag.find(&marker).unwrap_or_else(|| panic!("{id} has no {attr}: {tag}")) + marker.len();
+    tag[s..s + tag[s..].find('"').unwrap()].to_owned()
+}
+
+#[tokio::test]
+async fn scoped_styles_stay_on_their_file_and_globals_cross_it() {
+    let r = router().await;
+    let page = send(&r, get("/scoped", None)).await;
+    let page_id = attr_in_tag(&page.body, "page-copy", "data-rk");
+    let chip_id = attr_in_tag(&page.body, "outer", "data-rk");
+    let layout_id = attr_in_tag(&page.body, "site-layout", "data-rk");
+    assert_ne!(page_id, chip_id, "a component does not wear the page's scope");
+    assert_ne!(page_id, layout_id, "a layout does not wear the page's scope");
+    assert_ne!(chip_id, layout_id);
+    assert_eq!(attr_in_tag(&page.body, "page-banner", "data-rk"), page_id);
+    assert!(!page.body.contains("id=\"inner\""));
+
+    let marker = "rel=\"stylesheet\" href=\"";
+    let href_at = page.body.find(marker).expect("stylesheet link");
+    let href = page.body[href_at + marker.len()..].split('"').next().unwrap();
+    let css = send(&r, get(href, None)).await;
+    assert_eq!(css.status, StatusCode::OK, "{href}");
+    assert!(css.body.contains(&format!(".copy[data-rk=\"{page_id}\"]")), "{}", css.body);
+    assert!(css.body.contains(&format!(".copy[data-rk=\"{chip_id}\"]")), "{}", css.body);
+    assert!(css.body.contains(&format!("#site-layout[data-rk=\"{layout_id}\"]")), "{}", css.body);
+    assert!(css.body.contains(".banner { font-weight: 700; }"), "the global rule is not scoped: {}", css.body);
+    assert!(!css.body.contains(".banner[data-rk"), "{}", css.body);
+
+    let on = send(&r, get("/scoped-on", None)).await;
+    assert!(on.body.contains("id=\"inner\""));
+    assert_eq!(attr_in_tag(&on.body, "inner", "data-rk"), chip_id);
+    assert_eq!(attr_in_tag(&on.body, "page-copy", "data-rk"), page_id, "the same style text keeps the same scope");
 }
 
 #[tokio::test]

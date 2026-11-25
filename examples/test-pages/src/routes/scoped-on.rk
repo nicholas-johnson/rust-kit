@@ -1,0 +1,23 @@
+<script>
+  import Chip from "$lib/Chip.rk";
+  let on = $state(true);
+</script>
+
+<title>Scoped styles</title>
+
+<p><a href="/">← All pages</a></p>
+<p id="page-copy" class="copy">Page copy</p>
+<p id="page-banner" class="banner">Page banner</p>
+<Chip id="outer" />
+{#if on}
+  <Chip id="inner" />
+{/if}
+
+<style>
+  .copy { color: #036; }
+  :global(.banner) { font-weight: 700; }
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; margin: 0.25rem 0.25rem 0.25rem 0; }
+  code, output { font-family: ui-monospace, monospace; }
+  dt { font-weight: 600; } dd { margin: 0 0 0.4rem 1rem; }
+</style>

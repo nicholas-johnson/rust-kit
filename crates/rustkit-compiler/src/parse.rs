@@ -53,6 +53,18 @@ pub enum Node {
     },
 }
 
+/// Whether an element's `<style>` was scoped.
+///
+/// `Open` means the file that owns the element has not been visited yet.
+/// Stamping a file sets `Plain` or `Scoped`, and a parent file leaves those
+/// elements alone so its selectors do not leak in.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScopeMark {
+    Open,
+    Plain,
+    Scoped(String),
+}
+
 #[derive(Debug, Clone)]
 pub struct Element {
     pub id: usize,
@@ -60,6 +72,7 @@ pub struct Element {
     pub attrs: Vec<Attr>,
     pub children: Vec<Node>,
     pub void: bool,
+    pub scope: ScopeMark,
 }
 
 #[derive(Debug, Clone)]
@@ -92,6 +105,10 @@ pub struct PageFile {
     pub script: Option<(String, usize)>,
     pub module_script: Option<(String, usize)>,
     pub style: Option<String>,
+    /// `<style global>`: copied through, and this file's elements are not scoped.
+    pub style_global: bool,
+    /// Byte offset of the style body, for diagnostics.
+    pub style_at: Option<usize>,
     pub title: Option<String>,
     pub nodes: Vec<Node>,
 }
@@ -334,6 +351,8 @@ impl<'a> Parser<'a> {
             let slot = match (tag.as_str(), module) {
                 ("style", _) => {
                     self.page.style = Some(body);
+                    self.page.style_global = attrs.iter().any(|a| a.name == "global" && matches!(a.value, AttrValue::Bare));
+                    self.page.style_at = Some(body_pos);
                     return Ok(None);
                 }
                 (_, true) => &mut self.page.module_script,
@@ -375,7 +394,7 @@ impl<'a> Parser<'a> {
             return self.component(tag, attrs, children, pos).map(Some);
         }
         let id = self.id();
-        Ok(Some(Node::Element(Element { id, tag, attrs, children, void })))
+        Ok(Some(Node::Element(Element { id, tag, attrs, children, void, scope: ScopeMark::Open })))
     }
 
     fn component(&mut self, tag: String, attrs: Vec<Attr>, body: Vec<Node>, pos: usize) -> Result<Node, Diag> {
