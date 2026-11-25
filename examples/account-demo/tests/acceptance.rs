@@ -221,6 +221,43 @@ async fn profile_action_rejects_forged_and_invalid_posts() {
     assert_eq!(state.accounts_service.get("alice").await.unwrap().display_name, "Alice Liddell");
 }
 
+/// A signed-in session written before the process stops is still the same
+/// session afterwards: the account page, and a form posted with the old CSRF
+/// token.
+#[tokio::test]
+async fn signed_in_session_survives_a_restart() {
+    let dir = std::env::temp_dir().join(format!("rk-sessions-{}", rustkit::random_token()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("sessions.json");
+
+    let (cookie, token) = {
+        let app = account_demo::app(Duration::ZERO, false)
+            .session_store(rustkit::SessionStore::persistent(&path));
+        let router = app.into_router().await.unwrap();
+        let cookie = sign_in(&router, "alice").await;
+        let page = send(&router, get("/account", Some(&cookie))).await;
+        assert_eq!(page.status, StatusCode::OK);
+        assert!(strip_scope(&page.body).contains("<h1>Hello, Alice Liddell</h1>"), "{}", page.body);
+        (cookie, page.csrf())
+    };
+
+    let app = account_demo::app(Duration::ZERO, false).session_store(rustkit::SessionStore::persistent(&path));
+    let router = app.into_router().await.unwrap();
+    let again = send(&router, get("/account", Some(&cookie))).await;
+    assert_eq!(again.status, StatusCode::OK);
+    assert!(strip_scope(&again.body).contains("<h1>Hello, Alice Liddell</h1>"), "{}", again.body);
+    assert_eq!(again.csrf(), token, "the CSRF token is the one issued before the restart");
+    assert!(again.cookie().is_none(), "a restart does not rotate the session id");
+
+    let saved = send(&router, post("/account/profile", Some(&cookie), &format!("name=Alice+L.&_csrf={token}"))).await;
+    assert_eq!(saved.status, StatusCode::SEE_OTHER);
+    assert_eq!(saved.header("location"), "/account");
+    let next = send(&router, get("/account", Some(&cookie))).await;
+    assert!(strip_scope(&next.body).contains("<h1>Hello, Alice L.</h1>"), "{}", next.body);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[tokio::test]
 async fn user_text_is_escaped_in_html_and_payload() {
     let (router, _) = setup().await;

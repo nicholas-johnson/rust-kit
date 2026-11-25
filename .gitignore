@@ -1,4 +1,6 @@
 target/
 dist/
 site/dist*/
+sessions.json
+sessions.tmp
 .claude/worktrees/

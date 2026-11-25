@@ -66,13 +66,19 @@ There is no built-in health check endpoint. A prerendered route such as `/` is c
 
 ## Run one instance
 
-Sessions live in an in-memory map inside the process. This has consequences you must plan around:
+Give the app a session file so a restart keeps signed-in visitors:
 
-- **One instance only.** A second instance would not know the first one's sessions. Rust-kit has no shared session store and no support for sticky sessions yet, so do not run replicas behind a load balancer.
-- **A restart signs everyone out.** Every session and CSRF token is lost. Visitors who submit a form they loaded before the restart see **400** "This form has expired. Reload the page and try again."
-- **Memory grows with sessions.** A session is created at sign-in, and also for an anonymous visitor the first time a request-time page renders a `<form method="post">`, because the form needs a CSRF token. Expired sessions (12 hours idle) are removed only when that id is looked up again, so the map is not swept in the background. A restart clears it.
+```rust
+.session_store(rustkit::SessionStore::persistent("/var/lib/members/sessions.json"))
+```
 
-Persistent and shared session storage is on the [roadmap](/docs/roadmap/). See [Sessions](/docs/sessions/) for the details of the current store.
+The account demo's `serve` does this with `sessions.json` in the working directory. Without `session_store`, sessions stay in memory and a restart signs everyone out.
+
+- **One instance only.** The file has no lock. A second process using the same path can overwrite the first process's sessions. Do not run replicas behind a load balancer.
+- **A restart keeps the session** when the new process opens the same file. The cookie, the user id and the CSRF token still match, so a form loaded before the restart still posts. The idle clock is stored too: a session unused for 12 hours is expired whether or not the process restarted.
+- **The file grows with sessions.** A session is created at sign-in, and also for an anonymous visitor the first time a request-time page renders a `<form method="post">`, because the form needs a CSRF token. Expired sessions (12 hours idle) are removed only when that id is presented again.
+
+A store shared by several instances is on the [roadmap](/docs/roadmap/). See [Sessions](/docs/sessions/).
 
 ## Caching and CDNs
 
@@ -114,7 +120,7 @@ Request-time pages, `/_rk/source/…` endpoints and form actions are not in the 
 - [ ] `cargo build --release` on the target platform.
 - [ ] `secure_cookies(true)` (the default), set explicitly in your `main`.
 - [ ] TLS terminated at the proxy, `Host` forwarded unchanged.
-- [ ] Exactly one instance; restarts planned for low-traffic times.
+- [ ] Exactly one instance, with a session file on a disk that survives a restart.
 - [ ] Compression and access logging configured in the proxy or middleware.
 - [ ] CDN, if any, respects `private`, `no-store` and `Vary: Cookie`.
 - [ ] No session reads or `POST` forms on prerendered pages.

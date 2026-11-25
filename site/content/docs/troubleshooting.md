@@ -140,7 +140,7 @@ A `load="client"` source renders a "Loading…" placeholder on the server, and t
 This **400** means the `_csrf` field did not match the session's token. Causes, most common first:
 
 - **No session cookie reached the server**: the `Secure` problem above, or cookies blocked.
-- **The session changed since the page loaded**: the visitor signed in or out in another tab (sign-in rotates the session), the session sat idle for 12 hours, or the server restarted, which clears all sessions.
+- **The session changed since the page loaded**: the visitor signed in or out in another tab (sign-in rotates the session), or the session sat idle for 12 hours. A restart clears sessions only when the app is using the in-memory store. A file store keeps the id and the CSRF token.
 - **The form has no token**: a form you build by hand in JavaScript, or a `fetch` post. Only `<form method="post">` elements in templates get the hidden field automatically. A form whose method is written as an expression or omitted gets none.
 - **The form is on a prerendered page**: the token in the static HTML belongs to no real session. Make the page request-time.
 

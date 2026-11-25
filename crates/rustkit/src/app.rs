@@ -135,6 +135,16 @@ impl<S: Send + Sync + 'static> App<S> {
         self
     }
 
+    /// Replaces the in-memory session store. [`SessionStore::persistent`](crate::SessionStore::persistent)
+    /// keeps sessions across a process restart. Under `rustkit dev` the dev
+    /// session file stays in charge, so a rebuild does not sign visitors out.
+    pub fn session_store(mut self, store: SessionStore) -> Self {
+        if crate::dev::session_file().is_none() {
+            self.sessions = store;
+        }
+        self
+    }
+
     /// Registers a form action. The framework checks the request's origin and
     /// CSRF token before the action runs.
     pub fn action<F, Fut>(mut self, path: &str, f: F) -> Self
