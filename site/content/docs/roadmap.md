@@ -22,9 +22,9 @@ This page lists what exists, what does not exist yet, and the rough edges in wha
 | Data | `<DataSource>` with `load="server"` (concurrent, once per request) and `load="client"` (fetched once per page load, with Retry) |
 | Handoff | A minimal, HTML-safe JSON payload with only the fields browser code reads |
 | Server | `App` on axum, form actions, `Redirect`, typed `Error` responses, `Server-Timing` |
-| Security | Server-side sessions with opaque cookies, session rotation at sign-in, automatic CSRF tokens, origin checks, cache headers for personalised pages |
+| Security | Server-side sessions with opaque cookies, session rotation at sign-in, a file store that survives a restart, automatic CSRF tokens, origin checks, cache headers for personalised pages |
 | Static output | `prerender = true`, `App::build(dir)` |
-| Styling | One hashed stylesheet per page |
+| Styling | One hashed stylesheet per page, scoped to the file that wrote it. `:global` and `rustkit.toml` `css_scope = false` opt out |
 | Diagnostics | Compile errors with file, line, column and a help line |
 
 ## Not built yet
@@ -35,7 +35,6 @@ These are absent from the code. Where a page in the docs mentions one, it links 
 
 - **Custom `<head>` content.** The document shell is fixed: no extra `<meta>`, `<link>` or favicon tags, and `lang="en"` always.
 - **Dynamic titles.** `<title>` takes literal text only.
-- **CSS scoping.** Styles are global within a page.
 - **A separate shared stylesheet.** A layout's `<style>` is prepended to each wrapped page's sheet. There is no one CSS file shared by URL.
 - **Directives.** No `bind:`, `class:`, `use:` or spread attributes.
 - **More block types.** No `{@html}`, `{#await}`, `{#key}`, or `{:else}` for empty `{#each}`.
@@ -55,8 +54,8 @@ These are absent from the code. Where a page in the docs mentions one, it links 
 
 ### Server and operations
 
-- **Persistent sessions.** Sessions live in process memory. Restarting the server signs everyone out, and multiple instances do not share sessions.
-- **Session configuration.** The idle timeout (12 hours) and cookie name (`rk_session`) are fixed when using `App`.
+- **A shared session store.** A file keeps one process's sessions across a restart. Two processes must not write the same file, and there is no store that several instances share.
+- **Session configuration.** The idle timeout (12 hours) and cookie name (`rk_session`) are fixed for `SessionStore::persistent`. `App` has no method that changes them.
 - **Custom error pages.** Error responses use a fixed minimal template.
 - **Static file serving.** There is no `public/` directory; add your own axum route.
 - **A real upstream client in the demo.** The demo's accounts service is an in-memory stand-in with latency and call counters. A real HTTP client would replace `examples/account-demo/src/upstream.rs` and nothing else.

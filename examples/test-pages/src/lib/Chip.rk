@@ -1,0 +1,6 @@
+<span id={id} class="copy">Chip</span>
+<span class="banner">Wide</span>
+
+<style>
+  .copy { color: #063; }
+</style>

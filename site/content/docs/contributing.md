@@ -29,7 +29,7 @@ rust-kit/
 │       └── src/
 │           ├── app.rs             App, router, actions, endpoints, document shell
 │           ├── context.rs         RequestContext, users, CSRF, login/logout
-│           ├── session.rs         in-memory session store, tokens
+│           ├── session.rs         session store (memory or a file), tokens
 │           ├── error.rs           Error and its HTTP mapping
 │           └── js.rs              JavaScript value semantics for the Rust renderer
 ├── examples/
@@ -62,8 +62,8 @@ This runs everything in the workspace:
 | Tests | Where | What they check |
 | --- | --- | --- |
 | Compiler unit tests | `crates/rustkit-compiler/src/tests.rs`, plus `#[cfg(test)]` modules in `expr.rs` and `script.rs` | The proposal's account page compiles; static pages ship no JavaScript; key diagnostics fire with the right position and help text; the state rewrite |
-| Runtime unit tests | `crates/rustkit/src/js.rs` | Number formatting, truthiness and comparison match JavaScript; the payload cannot close its `<script>` |
-| Acceptance tests | `examples/account-demo/tests/acceptance.rs` | The real router, in process: prerendering, one upstream read per page, minimal payload, per-user isolation, 401/403 handling, CSRF and origin checks, escaping |
+| Runtime unit tests | `crates/rustkit/src/js.rs`, `crates/rustkit/src/session.rs` | Number formatting, truthiness and comparison match JavaScript; the payload cannot close its `<script>`; a session file survives a new store |
+| Acceptance tests | `examples/account-demo/tests/acceptance.rs` | The real router, in process: prerendering, one upstream read per page, minimal payload, per-user isolation, 401/403 handling, CSRF and origin checks, escaping, a signed-in session that survives a new process |
 
 Run one crate's tests with `-p`:
 

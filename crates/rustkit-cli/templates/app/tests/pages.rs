@@ -44,7 +44,9 @@ async fn the_counter_renders_its_first_frame_on_the_server() {
     let (_, body) = get("/counter").await;
     // Interactive parts sit between `<!--rk:…-->` markers the browser module uses.
     let text = without_comments(&body);
-    assert!(text.contains(r#"<output id="count">0</output>"#), "{body}");
+    let output = text.split(r#"id="count""#).nth(1).expect("the page has the counter");
+    let value = output.split_once('>').and_then(|(_, rest)| rest.split_once("</output>")).map(|(v, _)| v);
+    assert_eq!(value, Some("0"), "{body}");
     assert!(body.contains("<script"), "the counter loads its page module");
 }
 

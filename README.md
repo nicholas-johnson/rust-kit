@@ -146,8 +146,11 @@ client needs to the page runtime. A plain `cargo build` leaves them out, and a
 page whose runtime lacks them falls back to a full reload.
 
 `serve` imitates a 25 ms round trip to the accounts service. Sign in at
-`/login` as Alice or Bob (demo accounts with no password). `build` writes the
-prerendered routes and assets to `dist/` and prints JavaScript and CSS bytes per route.
+`/login` as Alice or Bob (demo accounts with no password). Sessions are written
+to `sessions.json` in the working directory, so stopping the process and
+starting it again keeps the sign-in. `build` writes the prerendered routes and
+assets to `dist/` and prints JavaScript and CSS bytes per route. It does not
+touch the session file.
 
 ## How a page compiles
 
@@ -261,12 +264,36 @@ The browser half was checked by hand in Chromium:
 - Every request-time page carries a `Server-Timing` header with `sources;dur=…` and
   `render;dur=…`, which separates upstream latency from render CPU time.
 
+### Persistent sessions
+
+The cookie stays an opaque id. The user id and the CSRF token stay on the
+server. `App::new` keeps that map in memory, so a restart of a process that
+never opted in still signs everyone out. To keep the map, pass a file:
+
+```rust
+let app = account_demo::app(Duration::from_millis(25), secure)
+    .session_store(rustkit::SessionStore::persistent("sessions.json"));
+```
+
+The file is rewritten when a session is created, used, or destroyed. A new
+process that opens the same path accepts the old cookie: the visitor is still
+signed in, and a CSRF token from a page loaded before the restart still
+matches. The 12-hour idle clock is stored in the file, so a restart does not
+extend it. On Unix the file mode is `0600`.
+
+The account demo's `serve` command uses `sessions.json` in the working
+directory. `rustkit dev` keeps using `target/rustkit-dev/<package>/sessions.json`
+and ignores `session_store`, so a rebuild does not sign you out either.
+
+Two processes must not share the file. There is no lock and no shared store,
+so run one instance.
+
 ### Layouts and one route parameter
 
 `layout.rk` in a folder wraps the pages in that folder and is not itself a
 URL. Nested folders nest layouts, outermost first. The layout marks where the
-page goes with `<slot />`. Its `<style>` is concatenated ahead of the page's,
-so the page's rules win. The document title is the page's, or the nearest
+page goes with `<slot />`. Its `<style>` is concatenated ahead of the page's
+and scoped to the layout. The document title is the page's, or the nearest
 layout's when the page has none.
 
 `blog/[slug].rk` is `/blog/{slug}`. The parameter is part of the page: the
@@ -301,14 +328,41 @@ The compiler inlines the component, the same way it inlines a layout. Rust and
 the browser walk one tree. The component's `$state`, its `$sources` imports and
 the rest of its script are merged into the page once, so two uses share that
 `$state`. Its `<style>` is concatenated ahead of the importer's, nested
-components first. Layout composition still puts the outer layout first and the
-page last, so the page's rules win.
+components first, and scoped to that file. Layout composition still puts the
+outer layout first and the page last, so the page's rules win when they match
+the same element. Slot children stay in the parent's scope.
 
 A prop is a name the component template reads. It is required, and it is a
 static string or one `{expr}`. There are no defaults and no event handlers on
 the tag. One `<slot />` receives the tag's children, which stay in the parent's
 scope. A component cannot set `<title>` or `prerender`. A source imported by a
 component follows the pages that use it, under the same one-parameter rule.
+
+### CSS scoping
+
+Scoping is on for every page, layout, and component `<style>`. The compiler
+adds `data-rk="…"` to the elements that file owns and rewrites each selector
+onto the last compound (`h1` becomes `h1[data-rk="…"]`, and `a::before` becomes
+`a[data-rk="…"]::before`). The value is a hash of that file's style text, so
+identical CSS shares a marker and different CSS does not. A declaration
+block is copied as written. A file with no
+`<style>` is left unmarked, and a parent's selectors do not reach into it.
+
+`html`, `body`, and `:root` stay as written. The document shell is not in the
+template, so a scope attribute there would never match.
+
+`:global(selector)` and a `:global { … }` block emit those rules unscoped.
+`<style global>` leaves the whole block unscoped and does not mark the file.
+The runtime inserts `.rk-loading` and `.rk-error` itself, so style them with
+`:global`.
+
+Turn scoping off for an app with `rustkit.toml` in the crate root:
+
+```toml
+css_scope = false
+```
+
+A missing file, or a file that does not set the key, leaves scoping on.
 
 ## Not in this milestone
 
@@ -330,9 +384,10 @@ component follows the pages that use it, under the same one-parameter rule.
   A failed client load shows a Retry button.
 - **Components**: a page or a layout can import one. Two uses share its
   `$state`. Props have no defaults and no fields. The tag takes no event
-  handlers. Styles are not scoped. See [Components](#components) above.
-- **Not built yet**: CSS scoping, rest parameters (`[...slug]`), optional
-  segments (`[[slug]]`), more than one `[param]` per route, content
-  collections, and persistent session storage.
+  handlers. See [Components](#components) above.
+- **Not built yet**: rest parameters (`[...slug]`), optional
+  segments (`[[slug]]`), more than one `[param]` per route, and content
+  collections. A session file is one process; a store shared by several
+  instances is not built.
 - **Views**: they must serialize with `#[serde(rename_all = "camelCase")]` so
   that their JSON names match what templates read.

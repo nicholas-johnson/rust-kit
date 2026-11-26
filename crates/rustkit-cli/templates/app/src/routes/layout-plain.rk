@@ -3,7 +3,7 @@
   <slot />
 </main>
 
-<style>
+<style global>
   :root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
   body { max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
   nav { display: flex; gap: 1rem; margin-bottom: 2rem; }

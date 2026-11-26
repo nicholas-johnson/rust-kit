@@ -44,6 +44,7 @@ fn compile_app(ws: &Workspace) -> Result<Vec<RouteSummary>, String> {
     if !routes_dir.is_dir() {
         return Err(format!("`{}` has no src/routes directory", ws.package));
     }
+    let file = rustkit_compiler::load_file_config(dir)?;
     let cfg = Config {
         routes_dir,
         out_dir: ws.target.join("rustkit-check").join(&ws.package),
@@ -52,6 +53,7 @@ fn compile_app(ws: &Workspace) -> Result<Vec<RouteSummary>, String> {
         dev: false,
         crate_dir: dir.to_path_buf(),
         tailwind: None,
+        css_scope: file.css_scope,
     };
     compile_quiet(&cfg)
 }

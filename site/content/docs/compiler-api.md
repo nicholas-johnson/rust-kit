@@ -49,6 +49,16 @@ pub struct Config {
     pub state_type: String,
     /// Module holding the source resolvers, e.g. `crate::sources`.
     pub sources_module: String,
+    /// Include the runtime hooks `rustkit dev` uses to update pages in place.
+    pub dev: bool,
+    /// The crate's root directory. Tailwind runs here, and `build_script`
+    /// reads `rustkit.toml` from here.
+    pub crate_dir: PathBuf,
+    /// Generate an app-wide Tailwind stylesheet. Off when `None`.
+    pub tailwind: Option<Tailwind>,
+    /// Scope each `<style>` to the file that wrote it. `build_script` sets
+    /// this from `rustkit.toml`; it is on when that file is missing.
+    pub css_scope: bool,
 }
 
 pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String>
@@ -66,6 +76,10 @@ fn main() {
         out_dir: PathBuf::from(std::env::var("OUT_DIR").unwrap()),
         state_type: "crate::state::AppState".into(),
         sources_module: "crate::data::sources".into(),
+        dev: false,
+        crate_dir: root.clone(),
+        tailwind: None,
+        css_scope: true,
     };
     println!("cargo:rerun-if-changed=src/routes");
     println!("cargo:rerun-if-changed=src/lib");
@@ -205,4 +219,4 @@ The browser runtime source, exactly as shipped in `runtime.<hash>.js`. It is 6,6
 
 ## Not available
 
-There is no command-line compiler, no watch mode, no configuration file, and no option for minification, source maps or CSS scoping. The `cli` page lists the [commands that do exist](/docs/cli/).
+There is no command-line compiler, no watch mode, and no option for minification or source maps. CSS scoping is on by default; `rustkit.toml` sets `css_scope = false` for `build_script`, and `Config.css_scope` does the same for `compile`. The `cli` page lists the [commands that do exist](/docs/cli/).

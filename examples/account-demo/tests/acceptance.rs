@@ -90,7 +90,7 @@ async fn article_builds_to_static_html_without_javascript() {
     let report = app.build(&dir).await.unwrap();
     assert!(report.files.contains(&"article/index.html".to_owned()));
     let html = std::fs::read_to_string(dir.join("article/index.html")).unwrap();
-    assert!(html.contains("<h1>Why render on the server?</h1>"));
+    assert!(strip_scope(&html).contains("<h1>Why render on the server?</h1>"));
     assert!(!html.contains("<script"), "static article must not load scripts");
     assert!(html.contains("rel=\"stylesheet\""));
     std::fs::remove_dir_all(&dir).ok();
@@ -113,7 +113,7 @@ async fn account_greeting_is_in_raw_html_and_read_once() {
 
     let res = send(&router, get("/account", Some(&cookie))).await;
     assert_eq!(res.status, StatusCode::OK);
-    assert!(res.body.contains("<h1>Hello, Alice Liddell</h1>"), "{}", res.body);
+    assert!(strip_scope(&res.body).contains("<h1>Hello, Alice Liddell</h1>"), "{}", res.body);
     assert_eq!(svc.account_reads.load(Ordering::SeqCst) - before, 1, "one upstream read per page");
 
     // The editor's initial value travels in the page; only the field it needs.
@@ -197,7 +197,7 @@ async fn saving_the_profile_updates_upstream_and_the_next_page() {
     assert_eq!(res.header("location"), "/account");
 
     let next = send(&router, get("/account", Some(&cookie))).await;
-    assert!(next.body.contains("<h1>Hello, Alice L.</h1>"));
+    assert!(strip_scope(&next.body).contains("<h1>Hello, Alice L.</h1>"));
     let rec = state.accounts_service.get("alice").await.unwrap();
     assert_eq!(rec.display_name, "Alice L.");
 }
@@ -221,6 +221,43 @@ async fn profile_action_rejects_forged_and_invalid_posts() {
     assert_eq!(state.accounts_service.get("alice").await.unwrap().display_name, "Alice Liddell");
 }
 
+/// A signed-in session written before the process stops is still the same
+/// session afterwards: the account page, and a form posted with the old CSRF
+/// token.
+#[tokio::test]
+async fn signed_in_session_survives_a_restart() {
+    let dir = std::env::temp_dir().join(format!("rk-sessions-{}", rustkit::random_token()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("sessions.json");
+
+    let (cookie, token) = {
+        let app = account_demo::app(Duration::ZERO, false)
+            .session_store(rustkit::SessionStore::persistent(&path));
+        let router = app.into_router().await.unwrap();
+        let cookie = sign_in(&router, "alice").await;
+        let page = send(&router, get("/account", Some(&cookie))).await;
+        assert_eq!(page.status, StatusCode::OK);
+        assert!(strip_scope(&page.body).contains("<h1>Hello, Alice Liddell</h1>"), "{}", page.body);
+        (cookie, page.csrf())
+    };
+
+    let app = account_demo::app(Duration::ZERO, false).session_store(rustkit::SessionStore::persistent(&path));
+    let router = app.into_router().await.unwrap();
+    let again = send(&router, get("/account", Some(&cookie))).await;
+    assert_eq!(again.status, StatusCode::OK);
+    assert!(strip_scope(&again.body).contains("<h1>Hello, Alice Liddell</h1>"), "{}", again.body);
+    assert_eq!(again.csrf(), token, "the CSRF token is the one issued before the restart");
+    assert!(again.cookie().is_none(), "a restart does not rotate the session id");
+
+    let saved = send(&router, post("/account/profile", Some(&cookie), &format!("name=Alice+L.&_csrf={token}"))).await;
+    assert_eq!(saved.status, StatusCode::SEE_OTHER);
+    assert_eq!(saved.header("location"), "/account");
+    let next = send(&router, get("/account", Some(&cookie))).await;
+    assert!(strip_scope(&next.body).contains("<h1>Hello, Alice L.</h1>"), "{}", next.body);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[tokio::test]
 async fn user_text_is_escaped_in_html_and_payload() {
     let (router, _) = setup().await;
@@ -233,4 +270,19 @@ async fn user_text_is_escaped_in_html_and_payload() {
     assert!(body.contains("Hello, &lt;/script&gt;&lt;img src=x onerror=alert(1)&gt;"));
     assert!(!body.contains("<img"));
     assert_eq!(body.matches("</script>").count(), 2, "only the payload and module tags close");
+}
+
+/// Drops ` data-rk="…"` so an assertion about a tag can ignore scoping.
+fn strip_scope(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    let needle = " data-rk=\"";
+    while let Some(at) = rest.find(needle) {
+        out.push_str(&rest[..at]);
+        let value = at + needle.len();
+        let end = value + rest[value..].find('"').unwrap() + 1;
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
 }

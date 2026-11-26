@@ -94,8 +94,9 @@ Any call, including a method call such as `data.name.toUpperCase()`, is rejected
 | `` `<script>` must be at the top level of a page `` (or `<style>`) | A script or style nested inside an element. | Move it to the top level. |
 | `a page can have only one script of each kind` | Two `<script>` or two `<script context="module">` blocks. | Merge them. |
 | `` unclosed `<script>` `` (or `<style>`) | No closing tag. | Add it. |
+| unclosed `{`, unterminated comment, empty selector, or unclosed `:global(` in `<style>` | The style block is not valid enough to scope. | Close the brace, comment, or `:global(…)`. The help line points at `:global` and `<style global>`. |
 
-A page with two `<style>` blocks is not an error: the last one wins.
+A page with two `<style>` blocks is not an error: the last one wins. With scoping on, a selector the rewriter cannot handle fails the build. `html`, `body`, and `:root` are left unscoped on purpose.
 
 ## Components and data sources
 

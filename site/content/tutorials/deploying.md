@@ -1,6 +1,6 @@
 ---
 title: Deploying
-description: Build a release binary, prerender its static pages, and run it behind a TLS reverse proxy with secure cookies, knowing the limits of in-memory sessions.
+description: Build a release binary, prerender its static pages, and run it behind a TLS reverse proxy with secure cookies and a session file.
 order: 10
 level: Advanced
 duration: 40 min
@@ -15,7 +15,7 @@ A production setup for the `members` app:
 - the binary listening on `127.0.0.1:3000`, with `Secure` session cookies, behind a reverse proxy that handles TLS on port 443;
 - a systemd unit that starts it on boot and restarts it if it crashes.
 
-You'll also learn the one constraint that shapes every Rust-kit deployment today: sessions live in the server's memory.
+You'll also learn the constraint that still shapes every Rust-kit deployment: one process owns the session file. A restart of that process keeps the sign-in. A second process must not write the same file.
 
 ## Prerequisites
 
@@ -65,7 +65,8 @@ fn secure_cookies() -> bool {
 
 async fn serve(addr: &str) {
     let secure = secure_cookies();
-    let app = members::app(latency(), secure);
+    let app = members::app(latency(), secure)
+        .session_store(rustkit::SessionStore::persistent("sessions.json"));
     let router = app.into_router().await.expect("failed to build the router");
     let listener = tokio::net::TcpListener::bind(addr).await.expect("could not bind");
     println!("listening on http://{addr} (secure cookies: {secure})");
@@ -280,19 +281,22 @@ Then sign in with a browser, open `/notes`, and sign out. If sign-in fails with 
 
 ## Step 8: Understand the single-instance limit
 
-Rust-kit's session store is an in-memory map inside the server process. That has three consequences you need to plan for:
+`serve` passes `SessionStore::persistent("sessions.json")`, so the user id and the CSRF token are written next to the process. Deploying a new binary, a crash, or a reboot keeps everyone signed in, as long as the new process opens the same file. Put that file on a disk that survives the deploy. `sessions.json` in the working directory is fine for this tutorial; a path such as `/var/lib/members/sessions.json` is the same call.
 
-1. **A restart signs everyone out.** Deploying a new version, a crash, or a reboot clears every session. For many internal tools that's acceptable. For a public app, deploy at quiet times and keep restarts rare.
-2. **Run exactly one instance.** Two processes behind a load balancer don't share sessions, so a visitor who signs in on one and lands on the other is signed out, and their CSRF token is rejected. "Sticky sessions" on the load balancer reduce this, but don't remove it: a restart still loses that instance's sessions.
-3. **Scale up, not out.** One Rust process on a multi-core machine handles a lot of traffic, because rendering is native code and every request runs on Tokio's thread pool. When you need more, use a bigger machine.
+Three limits remain:
 
-Sessions also expire after 12 hours without use. Persistent, shared session storage is on the [roadmap](/docs/roadmap/). Until it lands, these limits apply to any app that signs people in. A fully prerendered site, like the one in [A static blog](/tutorials/static-blog/), has none of them: copy `dist/` to any static host and you're done.
+1. **Run exactly one instance.** The file has no lock. Two processes behind a load balancer can overwrite each other's sessions, so a visitor who signs in on one and lands on the other is signed out, and their CSRF token is rejected. Sticky sessions do not fix that.
+2. **Scale up, not out.** One Rust process on a multi-core machine handles a lot of traffic, because rendering is native code and every request runs on Tokio's thread pool. When you need more, use a bigger machine.
+3. **Sessions still expire.** A session unused for 12 hours is dropped, and the clock is stored in the file, so a restart does not extend it.
+
+A store that several instances share is on the [roadmap](/docs/roadmap/). A fully prerendered site, like the one in [A static blog](/tutorials/static-blog/), has none of these limits: copy `dist/` to any static host and you're done. Leaving out `session_store` puts sessions back in memory, and a restart signs everyone out.
 
 ## What just happened
 
 - **One artifact.** The release binary contains the router, every compiled page, every asset and the runtime. `build` exports the static subset for anyone who wants it.
 - **TLS at the edge.** The proxy terminates HTTPS and compresses responses. The app listens only on loopback, sets `Secure` cookies, and relies on the proxy to pass `Host` through so its origin checks still work.
 - **Safe defaults where it counts.** Cookies are secure unless you say otherwise. Personal pages are never publicly cacheable. Errors stay out of responses and go to the log.
+- **Sessions on disk.** `serve` writes `sessions.json`. Restarting this one process keeps the sign-in.
 
 ### Deployment checklist
 
@@ -300,7 +304,7 @@ Sessions also expire after 12 hours without use. Persistent, shared session stor
 - `SECURE_COOKIES` unset (or anything but `0`) in production.
 - App bound to `127.0.0.1`, reachable only through the proxy.
 - Proxy serves HTTPS, redirects HTTP, compresses, and preserves `Host`.
-- Exactly one instance, with a restart policy.
+- Exactly one instance, with a restart policy, and the session file on a disk that survives it.
 - Logs collected from standard error.
 
 ## Next steps

@@ -219,6 +219,8 @@ async fn state_changes_render_what_rust_would_have_rendered() {
         ("/blog/hello", json!({ "open": true }), "/blog/hello/open"),
         ("/ticks", json!({ "ticks": 2 }), "/ticks-2"),
         ("/ticks-2", json!({ "ticks": 0 }), "/ticks"),
+        ("/scoped", json!({ "on": true }), "/scoped-on"),
+        ("/scoped-on", json!({ "on": false }), "/scoped"),
     ] {
         let page = load(&router, from).await;
         let want = ssr_blocks(&send(&router, get(reference, None)).await.body);

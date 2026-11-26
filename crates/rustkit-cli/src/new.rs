@@ -271,6 +271,7 @@ mod tests {
                 dev: false,
                 crate_dir: dir.clone(),
                 tailwind: None,
+                css_scope: true,
             };
             let routes = rustkit_compiler::compile_quiet(&cfg).unwrap_or_else(|e| panic!("{e}"));
             let paths: Vec<&str> = routes.iter().map(|r| r.path.as_str()).collect();

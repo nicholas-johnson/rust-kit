@@ -17,6 +17,8 @@
 
 mod codegen;
 mod component;
+mod config;
+mod css;
 mod expr;
 mod parse;
 mod route;
@@ -29,6 +31,7 @@ use std::fs;
 use std::path::PathBuf;
 
 pub use codegen::Options;
+pub use config::{FileConfig, load as load_file_config};
 pub use tailwind::{TAILWIND_ENV, Tailwind};
 
 const RUNTIME_JS: &str = include_str!("runtime.js");
@@ -94,7 +97,10 @@ pub struct CompiledPage {
 }
 
 pub fn compile_page(src: &str, opts: &Options) -> Result<CompiledPage, Diag> {
-    let page = parse::parse(src)?;
+    let mut page = parse::parse(src)?;
+    css::apply(&mut page.style, page.style_global, &mut page.nodes).map_err(|err| {
+        Diag::new(page.style_at.unwrap_or(0) + err.pos, err.msg).help("selectors are scoped to this file. Wrap one in `:global(...)`, or mark the block `<style global>`")
+    })?;
     let out = codegen::generate(&page, opts)?;
     Ok(CompiledPage { rust: out.rust, js: out.js, css: out.css, prerender: out.prerender, server_sources: out.server_sources, client_sources: out.client_sources })
 }
@@ -112,6 +118,9 @@ pub struct Config {
     pub crate_dir: PathBuf,
     /// Generate an app-wide Tailwind stylesheet. Off when `None`.
     pub tailwind: Option<Tailwind>,
+    /// Scope `<style>` blocks to the file that wrote them. On unless
+    /// `rustkit.toml` sets `css_scope = false`.
+    pub css_scope: bool,
 }
 
 /// Per-route numbers reported by a build.
@@ -122,8 +131,8 @@ pub struct RouteSummary {
     pub css_bytes: usize,
 }
 
-/// 64-bit FNV-1a, used for content-addressed asset names.
-fn hash(s: &str) -> String {
+/// 64-bit FNV-1a, used for content-addressed asset names and CSS scope ids.
+pub(crate) fn hash(s: &str) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in s.bytes() {
         h ^= u64::from(b);
@@ -146,7 +155,7 @@ pub fn compile_quiet(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
 }
 
 fn compile_inner(cfg: &Config, cargo_directives: bool) -> Result<Vec<RouteSummary>, String> {
-    let prepared = route::prepare(&cfg.routes_dir)?;
+    let prepared = route::prepare(&cfg.routes_dir, cfg.css_scope)?;
     if cargo_directives {
         for path in &prepared.component_files {
             println!("cargo:rerun-if-changed={}", path.display());
@@ -309,7 +318,15 @@ impl Build {
         let crate_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("run from build.rs"));
         println!("cargo:rerun-if-changed=src/routes");
         println!("cargo:rerun-if-changed=src/lib");
+        println!("cargo:rerun-if-changed=rustkit.toml");
         println!("cargo:rerun-if-env-changed=RUSTKIT_DEV");
+        let file = match config::load(&crate_dir) {
+            Ok(file) => file,
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        };
         if let Some(tw) = &self.tailwind {
             println!("cargo:rerun-if-env-changed={TAILWIND_ENV}");
             println!("cargo:rerun-if-changed=src/tailwind.css");
@@ -326,6 +343,7 @@ impl Build {
             tailwind: self.tailwind,
             // `rustkit dev` sets this for its builds.
             dev: std::env::var("RUSTKIT_DEV").is_ok_and(|v| v == "1"),
+            css_scope: file.css_scope,
         };
         if let Err(e) = compile(&cfg) {
             eprintln!("{e}");

@@ -22,7 +22,8 @@ async fn main() {
             // Under `rustkit dev` this adopts the dev server's socket instead.
             let listener = rustkit::dev::listener(addr).await.expect("bind");
             let local = listener.local_addr().expect("local address");
-            let app = {{crate}}::app(!local.ip().is_loopback());
+            // Sessions survive a restart. `rustkit dev` keeps its own file instead.
+            let app = {{crate}}::app(!local.ip().is_loopback()).session_store(rustkit::SessionStore::persistent("sessions.json"));
             let router = app.into_router().await.expect("prerender failed");
             println!("listening on http://{local}");
             axum::serve(listener, router).await.unwrap();

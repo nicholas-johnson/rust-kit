@@ -57,6 +57,21 @@ impl Res {
     }
 }
 
+/// Removes ` data-rk="…"` so a test about a tag can ignore scoping.
+pub fn strip_scope(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    let needle = " data-rk=\"";
+    while let Some(at) = rest.find(needle) {
+        out.push_str(&rest[..at]);
+        let value = at + needle.len();
+        let end = value + rest[value..].find('"').expect("unclosed data-rk") + 1;
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Removes `<!--rk:…-->` block markers, leaving what a reader sees.
 pub fn strip_markers(html: &str) -> String {
     let mut out = String::with_capacity(html.len());

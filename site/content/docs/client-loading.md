@@ -108,10 +108,10 @@ Clicking Retry fetches the source again and shows the loading placeholder until 
 
 The runtime is written to keep previously loaded data on screen during a forced re-fetch. In v0.1 that never comes up, because a source that loaded successfully is never fetched again.
 
-You can style these with the `rk-loading` and `rk-error` classes in your page's `<style>`. The demo dims the placeholder:
+You can style these with the `rk-loading` and `rk-error` classes in your page's `<style>`. The runtime inserts those elements, so they have no `data-rk` and the selector needs [`:global`](/docs/styling/#a-rule-that-should-apply-everywhere). The demo dims the placeholder:
 
 ```css
-.rk-loading { opacity: 0.6; }
+:global(.rk-loading) { opacity: 0.6; }
 ```
 
 ## One fetch per source per page

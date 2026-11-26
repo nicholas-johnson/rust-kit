@@ -88,7 +88,7 @@ Yes. `App::into_router()` returns a normal `axum::Router`. Merge it with your ow
 
 ## Where do sessions live?
 
-In memory, in the server process, with a 12-hour idle timeout. A restart signs everyone out, and multiple instances do not share sessions. Persistent session storage is not built yet. See [Sessions](/docs/sessions/).
+On the server, behind the `rk_session` cookie, with a 12-hour idle timeout. `App::new` keeps the map in memory, so a restart of that process signs everyone out. `App::session_store(SessionStore::persistent(path))` writes the same map to a file, and a new process that opens that path keeps the sign-in and the CSRF token. Two processes must not share the file. See [Sessions](/docs/sessions/).
 
 ## Is there a CLI?
 

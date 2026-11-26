@@ -48,7 +48,7 @@ my-app/
 │   ├── sources.rs        the `greeting` resolver
 │   ├── lib/Card.rk       a component
 │   └── routes/
-│       ├── layout.rk     navigation and site-wide styles
+│       ├── layout.rk     navigation and site-wide styles (`<style global>`)
 │       ├── index.rk      prerendered, ships no JavaScript
 │       ├── counter.rk    `$state` and click handlers
 │       └── hello.rk      loads `greeting` on the server
@@ -98,7 +98,7 @@ The app must bind with `rustkit::dev::listener(addr)`. Apps made by `rustkit new
 rustkit check
 ```
 
-Runs the page compiler directly on `src/routes` and `src/lib`, and prints the same diagnostics as a build. It finishes in milliseconds because it does not compile Rust. Use `cargo check` for that. Without `-p` it checks every app in the workspace. It exits with status 1 if any page fails.
+Runs the page compiler directly on `src/routes` and `src/lib`, with the app's `rustkit.toml`, and prints the same diagnostics as a build. It finishes in milliseconds because it does not compile Rust. Use `cargo check` for that. Without `-p` it checks every app in the workspace. It exits with status 1 if any page fails.
 
 ### rustkit routes
 
@@ -164,7 +164,7 @@ async fn main() {
 }
 ```
 
-`serve` marks the session cookie `Secure` unless it listens on a loopback address. Browsers refuse `Secure` cookies over plain HTTP, so on a LAN address signing in appears not to work; see [Troubleshooting](/docs/troubleshooting/#signing-in-does-nothing-on-plain-http).
+`serve` keeps sessions in `sessions.json` in the working directory, so a restart keeps everyone signed in (see [Sessions](/docs/sessions/)). Under `rustkit dev` that file is ignored and sessions live under `target/rustkit-dev/` instead. `serve` marks the session cookie `Secure` unless it listens on a loopback address. Browsers refuse `Secure` cookies over plain HTTP, so on a LAN address signing in appears not to work; see [Troubleshooting](/docs/troubleshooting/#signing-in-does-nothing-on-plain-http).
 
 ### What the two commands rely on
 
@@ -183,7 +183,7 @@ All of these run from the repository root.
 | Command | What it does |
 |---|---|
 | `cargo test` | Runs the compiler, runtime and CLI unit tests, and the examples' acceptance and parity tests. |
-| `cargo run -p account-demo -- serve [addr]` | Serves the demo app. It imitates a 25 ms round trip to its accounts service. Sign in at `/login` as Alice or Bob. |
+| `cargo run -p account-demo -- serve [addr]` | Serves the demo app. It imitates a 25 ms round trip to its accounts service and keeps sessions in `sessions.json`. Sign in at `/login` as Alice or Bob. |
 | `cargo run -p rustkit-cli -- dev -p account-demo` | The demo under `rustkit dev`. |
 | `cargo run -p site -- build [dir]` | Builds this documentation site, compiling every `rk` sample and checking every link. |
 
