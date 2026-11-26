@@ -10,7 +10,7 @@ duration: 15 min
 
 You'll create a small Rust crate called `hello-rk` that serves one page at `http://127.0.0.1:3000/`. The page is written as a `.rk` file: a template, plus an optional `<script>` and `<style>`. At build time the Rust-kit compiler turns it into a native Rust render function. When you view the page source in the browser, you'll see plain HTML, a stylesheet link, and no `<script>` tag at all.
 
-Along the way you'll see every piece a Rust-kit app needs. There is no project generator yet, so you'll write each file yourself. There are only five of them, and each one is short.
+Along the way you'll see every piece a Rust-kit app needs. You'll write each file yourself. There are only five of them, and each one is short. (Once you know the pieces, [`rustkit new`](/docs/cli/#rustkit-new) writes them for you.)
 
 ## Prerequisites
 

@@ -1,0 +1,22 @@
+<script context="module">
+  export const prerender = true;
+</script>
+
+<script>
+  import Card from "$lib/Card.rk";
+</script>
+
+<title>{{name}}</title>
+
+<h1>{{name}}</h1>
+<p>A new Rust-kit app. Each page below shows one part of the framework.</p>
+
+<Card title="This page">
+  <p>Prerendered at build time from <code>src/routes/index.rk</code>. It has no state and no handlers, so it ships no JavaScript.</p>
+</Card>
+<Card title="Counter">
+  <p><a href="/counter">/counter</a> keeps <code>$state</code> in the browser. Rust renders the first frame; a small module takes over.</p>
+</Card>
+<Card title="Hello">
+  <p><a href="/hello">/hello</a> loads data from a Rust resolver in <code>src/sources.rs</code> on every request.</p>
+</Card>

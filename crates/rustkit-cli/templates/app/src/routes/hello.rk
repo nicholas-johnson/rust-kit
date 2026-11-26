@@ -1,0 +1,10 @@
+<script>
+  import { greeting } from "$sources";
+</script>
+
+<title>Hello · {{name}}</title>
+
+<DataSource source={greeting} load="server" let:data>
+  <h1>{data.appName}</h1>
+  <p id="message">{data.message}</p>
+</DataSource>

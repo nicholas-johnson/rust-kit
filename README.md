@@ -13,10 +13,43 @@ correctly before any JavaScript runs.
 ```
 crates/rustkit-compiler   .rk parser, expression checker, Rust + JS codegen, browser runtime
 crates/rustkit            request context, sessions, CSRF, router, JS value semantics
+crates/rustkit-cli        the `rustkit` command: new, add, dev, check, routes, build, serve
 examples/account-demo     the proposal's static article and account page
 examples/test-pages       small single-feature pages, with server and Rust-vs-browser parity tests
 site                      generator for rust-kit.com (docs, tutorials, landing page)
 ```
+
+## Start a new app
+
+```bash
+cargo install --git https://github.com/nicholas-johnson/rust-kit rustkit-cli
+```
+
+```bash
+rustkit new my-app
+```
+
+```bash
+cd my-app && rustkit dev
+```
+
+`rustkit new` writes a working app: a prerendered home page, a counter with
+browser state, a page that loads data from a Rust resolver, a layout, a
+component, and tests. `--tailwind` turns on Tailwind, and inside a Cargo
+workspace the app is added to `members` (inside this repository it depends on
+the crates by path). The other commands:
+
+| Command | What it does |
+|---|---|
+| `rustkit add page blog/[slug]` | Adds a page; also `add layout <dir>` and `add component <Name>` |
+| `rustkit dev` | Runs the app; rebuilds, restarts and updates open pages on save |
+| `rustkit check` | Compiles every page and reports errors, without running Cargo |
+| `rustkit routes` | Lists routes, static or per-request, with JS and CSS bytes |
+| `rustkit build [dir]` | Release build, then the app's own `build` (prerender into `dist/`) |
+| `rustkit serve [addr]` | Release build, then the app's own `serve` |
+
+From a checkout, `cargo run -p rustkit-cli -- <command>` runs it without
+installing. See [CLI](https://rust-kit.com/docs/cli/) for every option.
 
 ## Test pages
 

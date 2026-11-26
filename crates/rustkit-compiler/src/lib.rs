@@ -136,9 +136,21 @@ fn hash(s: &str) -> String {
 /// diagnostics for all pages that failed. `layout.rk` files wrap the pages
 /// in their directory; they are not routes.
 pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
+    compile_inner(cfg, true)
+}
+
+/// [`compile`] for tools such as `rustkit check`: the same output, without
+/// the `cargo:rerun-if-changed` lines a build script prints.
+pub fn compile_quiet(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
+    compile_inner(cfg, false)
+}
+
+fn compile_inner(cfg: &Config, cargo_directives: bool) -> Result<Vec<RouteSummary>, String> {
     let prepared = route::prepare(&cfg.routes_dir)?;
-    for path in &prepared.component_files {
-        println!("cargo:rerun-if-changed={}", path.display());
+    if cargo_directives {
+        for path in &prepared.component_files {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
     }
     let opts = Options { state_type: &cfg.state_type, sources_module: &cfg.sources_module };
     let asset_dir = cfg.out_dir.join("rk_assets");
@@ -239,7 +251,7 @@ pub fn compile(cfg: &Config) -> Result<Vec<RouteSummary>, String> {
             let _ = writeln!(out, "        {s:?} => Some(Box::pin(async move {{ let v = {sm}::{s}(ctx).await?; Ok(::rustkit::__private::serde_json::to_value(&v)?) }})),");
         }
     }
-    out.push_str("        _ => { let _ = params; None }\n    }\n}\n\n");
+    out.push_str("        _ => { let _ = (ctx, params); None }\n    }\n}\n\n");
     let _ = writeln!(out, "pub fn manifest() -> ::rustkit::Manifest<{st}> {{\n    ::rustkit::Manifest {{\n        routes: vec![\n{routes}        ],\n        assets: vec![");
     for (name, ct, body) in &assets {
         fs::write(asset_dir.join(name), body).map_err(|e| e.to_string())?;

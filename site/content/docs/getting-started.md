@@ -5,7 +5,10 @@ section: Start here
 order: 2
 ---
 
-This page takes you from an empty directory to a running server with an interactive page. There is no project generator yet, so you set the crate up by hand. It is five small files, and seeing each one makes the rest of the docs easier to follow.
+This page takes you from an empty directory to a running server with an interactive page. You set the crate up by hand: it is five small files, and seeing each one makes the rest of the docs easier to follow.
+
+> [!TIP]
+> In a hurry? `rustkit new my-app` writes a working app with a static page, a counter, server data, a layout, a component and tests. Then `cd my-app` and run `rustkit dev`. See [CLI](/docs/cli/#rustkit-new).
 
 ## Prerequisites
 

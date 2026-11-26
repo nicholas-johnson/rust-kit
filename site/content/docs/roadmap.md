@@ -63,8 +63,7 @@ These are absent from the code. Where a page in the docs mentions one, it links 
 
 ### Tooling
 
-- **Project generator.** There is no `cargo rustkit new` or any other CLI. Projects are set up by hand; see [Getting started](/docs/getting-started/).
-- **Dev server and live reload.** Rebuild and restart with `cargo run`.
+- **More project templates.** `rustkit new` writes one starter app; there are no templates for, say, a blog or a signed-in dashboard. See [CLI](/docs/cli/).
 - **crates.io releases.** Depend on the Git repository.
 - **Editor support.** No syntax highlighting or language server for `.rk` files.
 

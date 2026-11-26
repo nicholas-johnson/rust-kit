@@ -1,0 +1,17 @@
+<script>
+  let count = $state(0);
+</script>
+
+<title>Counter · {{name}}</title>
+
+<h1>Counter</h1>
+<p>
+  <button id="dec" disabled={count <= 0} onclick={() => count = count - 1}>−</button>
+  <output id="count">{count}</output>
+  <button id="inc" onclick={() => count = count + 1}>+</button>
+</p>
+{#if count >= 5}<p>That's {count} clicks.</p>{/if}
+
+<style>
+  output { display: inline-block; min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; }
+</style>

@@ -1,0 +1,15 @@
+<nav class="mb-8 flex gap-4 text-sm font-medium">
+  <a class="hover:underline" href="/">Home</a>
+  <a class="hover:underline" href="/counter">Counter</a>
+  <a class="hover:underline" href="/hello">Hello</a>
+</nav>
+<main class="space-y-4">
+  <slot />
+</main>
+
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
+  body { max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; padding: 0.25rem 0.75rem; border-radius: 6px; border: 1px solid currentColor; }
+  button:disabled { opacity: 0.4; }
+</style>

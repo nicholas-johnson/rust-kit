@@ -1,76 +1,132 @@
 ---
 title: CLI
-description: The commands that exist today, and how to give your own app the same serve and build commands.
+description: The rustkit command — new, add, dev, check, routes, build and serve — and the serve and build commands every app has.
 section: Reference
 order: 6
 ---
 
-Rust-kit has no command-line tool of its own. There is no `rustkit` binary, no project generator, and no dev server with live reload. Pages compile as part of an ordinary `cargo build`, through your crate's [`build.rs`](/docs/compiler-api/), and your application is a normal Rust binary whose `main` you write.
+The `rustkit` command creates apps, adds pages to them, and runs them while you work. It wraps Cargo rather than replacing it: pages still compile in an ordinary `cargo build` through your crate's [`build.rs`](/docs/compiler-api/), and your app is still a normal Rust binary whose `main` you own.
 
-This page documents the commands that do exist in the repository, then shows how to write the same `serve` and `build` commands for your own app. A dedicated CLI is not available yet; see the [roadmap](/docs/roadmap/).
+## Installing
 
-## Commands in the repository
+The crates are not on crates.io yet. Install the command from the repository:
 
-All of these run from the repository root.
+```bash
+cargo install --git https://github.com/nicholas-johnson/rust-kit rustkit-cli
+```
+
+Inside a checkout of the repository you can also run it without installing, as `cargo run -p rustkit-cli -- <command>`.
+
+## Commands
 
 | Command | What it does |
 |---|---|
-| `cargo test` | Runs the compiler's unit tests, the runtime's unit tests, and the account demo's acceptance tests. |
-| `cargo run -p account-demo -- serve [addr]` | Serves the demo app. |
-| `cargo run -p account-demo -- build [dir]` | Writes the demo's prerendered pages and assets, and prints bytes per route. |
-| `cargo run -p site -- build [dir]` | Builds this documentation site. |
+| `rustkit new <path>` | Creates an app with a static page, a counter, a page that loads server data, a layout, a component and tests. |
+| `rustkit add <kind> <name>` | Adds a page, layout or component to an app. |
+| `rustkit dev` | Runs the app, and on every save rebuilds it, restarts it and updates open pages. |
+| `rustkit check` | Compiles every page, layout and component and reports errors, without running Cargo. |
+| `rustkit routes` | Lists every route, how it is served, and the JavaScript and CSS it ships. |
+| `rustkit build [dir]` | Runs the app's own `build` command from a release build. |
+| `rustkit serve [addr]` | Runs the app's own `serve` command from a release build. |
 
-### account-demo serve
+`rustkit --help` lists them, and `rustkit <command> --help` shows a command's options. Every command that acts on an app takes `-p <package>`. Without it, the command uses the only binary package in the workspace that depends on `rustkit`, or the one whose directory you are in.
 
-```bash
-cargo run -p account-demo -- serve 127.0.0.1:3000
-```
-
-| Argument | Default | Meaning |
-|---|---|---|
-| `addr` | `127.0.0.1:3000` | The socket address to listen on. |
-
-`serve` is also what runs when you pass no arguments. It imitates a 25 ms round trip on every call to the in-memory accounts service, so the `Server-Timing` header shows realistic `sources` times. It turns `Secure` cookies off only when the address starts with `127.0.0.1`. On any other address, such as `0.0.0.0:3000` or a LAN address, the session cookie is marked `Secure`. Browsers refuse `Secure` cookies over plain HTTP (some make an exception for `localhost`, not all), so signing in appears not to work. See [Troubleshooting](/docs/troubleshooting/#signing-in-does-nothing-on-plain-http).
-
-Sign in at `/login` as Alice or Bob. The demo accounts have no password.
-
-### account-demo build
+### rustkit new
 
 ```bash
-cargo run -p account-demo -- build dist
+rustkit new my-app
 ```
-
-| Argument | Default | Meaning |
-|---|---|---|
-| `dir` | `dist` | Output directory, created if needed. Existing files are overwritten, not removed. |
-
-It calls [`App::build`](/docs/runtime-api/#app), then prints one line per route. This is the real output for the demo today:
 
 ```text
-route        mode       JS bytes  CSS bytes
-/account     request        7998        689
-/article     static            0        546
-/            static            0        512
-/login       request           0        512
-
-wrote 8 files to dist
+my-app/
+├── Cargo.toml
+├── build.rs              compiles src/routes into Rust and JavaScript
+├── README.md
+├── src/
+│   ├── lib.rs            AppState and app()
+│   ├── main.rs           `serve [addr]` and `build [dir]`
+│   ├── sources.rs        the `greeting` resolver
+│   ├── lib/Card.rk       a component
+│   └── routes/
+│       ├── layout.rk     navigation and site-wide styles
+│       ├── index.rk      prerendered, ships no JavaScript
+│       ├── counter.rk    `$state` and click handlers
+│       └── hello.rk      loads `greeting` on the server
+└── tests/pages.rs        requests against the real router
 ```
 
-`static` routes were prerendered and written as `index.html` files. `request` routes render per request, so `build` does not write them; you need the running server for those. JS bytes are the page module plus the shared runtime, uncompressed. See [Performance](/docs/performance/#javascript-per-route).
+| Option | Meaning |
+|---|---|
+| `--name <name>` | The package name. Defaults to the last part of the path. |
+| `--tailwind` | Turns on [Tailwind](/docs/styling/), uses utility classes in the layout, and adds a `package.json` for the Tailwind CLI. Run `npm install` before the first build. |
+| `--rustkit-path <dir>` | Depends on a local checkout of the repository instead of Git. |
+| `--git <url>` | Depends on rust-kit from this Git URL. |
 
-Any other first argument prints ``unknown command `x`; use `serve [addr]` or `build [dir]` `` and exits with status 2.
+The path must not exist or must be empty. When it is inside a Cargo workspace, the app is added to the workspace's `members`. When that workspace is the rust-kit repository itself, the app depends on the crates by path, so it builds against your local changes.
 
-### site build
+### rustkit add
 
 ```bash
-cargo run -p site -- build site/dist
+rustkit add page about           # src/routes/about.rk          → /about
+rustkit add page blog/[slug]     # src/routes/blog/[slug].rk    → /blog/{slug}
+rustkit add layout blog          # src/routes/blog/layout.rk
+rustkit add component UserCard   # src/lib/UserCard.rk
 ```
 
-With no directory it writes to `site/dist`. It deletes the output directory first, renders every Markdown file under `site/content`, compiles every `rk` code block with the real compiler, and checks every internal link and anchor. It exits with status 1 if a sample fails to compile, a `fail` sample compiles, front matter is invalid, or a link is broken. Any other arguments print `usage: site build [out-dir]` and exit with status 2.
+`add page /` creates the home page, and `add layout /` the app-wide layout. Routes follow the same rules as the compiler (see [Pages and routes](/docs/pages-and-routes/)): at most one `[param]` segment, and `layout` is not a page name. `add` refuses to overwrite a file, and refuses a page whose route an `index.rk` already serves. Component names are PascalCase.
 
-## Writing your own serve and build
+### rustkit dev
 
-Your app's `main.rs` decides what commands it has. The demo's is 33 lines; here is the same shape for your own crate. It assumes your library exposes an `app()` function that returns a configured [`App`](/docs/runtime-api/#app), like the demo's `account_demo::app`.
+```bash
+rustkit dev
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--addr <host:port>` | `127.0.0.1:3000` | Where to listen. |
+| `--release` | off | Build with the release profile. |
+| `--offline` | off | Pass `--offline` to Cargo. |
+| `-- <args>` | `serve` | Arguments for the app. |
+
+`rustkit dev` builds the app and runs it. Then it watches the workspace, and when a file changes it rebuilds, restarts and updates the pages you have open. A stylesheet-only change swaps the `<link>` and leaves everything else alone. Other changes update the page node by node and carry `$state` over. The dev process owns the listening socket, so requests made during a restart wait instead of failing, and sessions are saved under `target/rustkit-dev/`, so you stay signed in. A failed build keeps the last good one running and shows the compiler's error over the page.
+
+The app must bind with `rustkit::dev::listener(addr)`. Apps made by `rustkit new` do; elsewhere it replaces `tokio::net::TcpListener::bind`.
+
+### rustkit check
+
+```bash
+rustkit check
+```
+
+Runs the page compiler directly on `src/routes` and `src/lib`, and prints the same diagnostics as a build. It finishes in milliseconds because it does not compile Rust. Use `cargo check` for that. Without `-p` it checks every app in the workspace. It exits with status 1 if any page fails.
+
+### rustkit routes
+
+```text
+$ rustkit routes
+route     mode      JS bytes CSS bytes
+/counter  request       8178       541
+/hello    request          0       432
+/         static           0       573
+```
+
+`static` routes are prerendered once; `request` routes render per request. JS bytes are the page module plus the shared runtime, uncompressed. CSS bytes leave out the Tailwind stylesheet. See [Performance](/docs/performance/#javascript-per-route).
+
+### rustkit build and rustkit serve
+
+```bash
+rustkit build dist
+```
+
+```bash
+rustkit serve 0.0.0.0:8080
+```
+
+These build the app with `--release` and run its own `build [dir]` and `serve [addr]` commands. Pass `--debug` to skip the release profile. They work with any app whose `main` has those two commands, which includes apps made by `rustkit new` and the account demo.
+
+## The app's own serve and build
+
+Your app's `main.rs` decides what commands it has. This is the one `rustkit new` writes:
 
 ```rust title=src/main.rs
 use std::path::PathBuf;
@@ -83,19 +139,21 @@ async fn main() {
             let out = PathBuf::from(args.get(1).map_or("dist", String::as_str));
             let app = my_app::app(true);
             let report = app.build(&out).await.expect("build failed");
+            println!("{:<12} {:<8} {:>10} {:>10}", "route", "mode", "JS bytes", "CSS bytes");
             for r in app.routes() {
                 let mode = if r.prerender { "static" } else { "request" };
-                println!("{:<24} {:<8} {:>8} JS {:>8} CSS", r.path, mode, r.js_bytes, r.css_bytes);
+                println!("{:<12} {:<8} {:>10} {:>10}", r.path, mode, r.js_bytes, r.css_bytes);
             }
-            println!("wrote {} files to {}", report.files.len(), out.display());
+            println!("\nwrote {} files to {}", report.files.len(), out.display());
         }
         Some("serve") | None => {
             let addr = args.get(1).map_or("127.0.0.1:3000", String::as_str);
-            let local = addr.starts_with("127.0.0.1") || addr.starts_with("localhost");
-            let app = my_app::app(!local);
+            // Under `rustkit dev` this adopts the dev server's socket instead.
+            let listener = rustkit::dev::listener(addr).await.expect("bind");
+            let local = listener.local_addr().expect("local address");
+            let app = my_app::app(!local.ip().is_loopback());
             let router = app.into_router().await.expect("prerender failed");
-            let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
-            println!("listening on http://{addr}");
+            println!("listening on http://{local}");
             axum::serve(listener, router).await.unwrap();
         }
         Some(other) => {
@@ -106,28 +164,30 @@ async fn main() {
 }
 ```
 
-```rust title=src/lib.rs
-pub fn app(secure_cookies: bool) -> rustkit::App<AppState> {
-    rustkit::App::new(generated::manifest(), AppState::new())
-        .secure_cookies(secure_cookies)
-        .action("/account/profile", actions::update_profile)
-}
-```
-
-Your crate needs `tokio` with the `macros` and `rt-multi-thread` features and `axum` 0.8 as direct dependencies for this `main`.
+`serve` marks the session cookie `Secure` unless it listens on a loopback address. Browsers refuse `Secure` cookies over plain HTTP, so on a LAN address signing in appears not to work; see [Troubleshooting](/docs/troubleshooting/#signing-in-does-nothing-on-plain-http).
 
 ### What the two commands rely on
 
 | Call | Behaviour to know |
 |---|---|
 | `App::into_router()` | Prerenders every `prerender` route first and returns `Err` if any of them fails, for example because it read the session. |
-| `App::build(dir)` | Writes prerendered routes as `<path>/index.html` (`/` becomes `index.html`) and every asset under `_rk/assets/`. Returns a [`BuildReport`](/docs/runtime-api/#compiled-output-types) listing the relative paths. |
+| `App::build(dir)` | Writes prerendered routes as `<path>/index.html` (`/` becomes `index.html`) and every asset under `_rk/assets/`. Existing files are overwritten, not removed. Returns a [`BuildReport`](/docs/runtime-api/#compiled-output-types) listing the relative paths. |
 | `App::routes()` | The compiled routes with `path`, `prerender`, `js_bytes` and `css_bytes`. |
 
 The binary built by `cargo build --release` contains every page and asset, so `serve` needs nothing else at run time. The output of `build` is useful when a CDN or another web server should serve the static pages and assets directly; see [Deployment](/docs/deployment/).
 
+## Commands in the repository
+
+All of these run from the repository root.
+
+| Command | What it does |
+|---|---|
+| `cargo test` | Runs the compiler, runtime and CLI unit tests, and the examples' acceptance and parity tests. |
+| `cargo run -p account-demo -- serve [addr]` | Serves the demo app. It imitates a 25 ms round trip to its accounts service. Sign in at `/login` as Alice or Bob. |
+| `cargo run -p rustkit-cli -- dev -p account-demo` | The demo under `rustkit dev`. |
+| `cargo run -p site -- build [dir]` | Builds this documentation site, compiling every `rk` sample and checking every link. |
+
 ## Things that do not exist yet
 
-- `rustkit new`, or any other scaffolding command. Set a project up by hand as in [Getting started](/docs/getting-started/).
-- A watch mode or live reload. Use a general tool such as `cargo watch` if you have it installed, and restart the server on change.
 - Flags for minification, source maps, a base path or environment-specific config.
+- Windows support. The `rustkit` command builds only on Unix (macOS and Linux), because `rustkit dev` hands its socket to the app in a way that needs Unix.

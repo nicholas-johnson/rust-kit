@@ -1,6 +1,6 @@
 [package]
 name = "rustkit-cli"
-description = "The `rustkit` command: a development server that rebuilds, restarts and reloads on save"
+description = "The `rustkit` command: create apps, add pages, check them, and run a development server that reloads on save"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
@@ -10,5 +10,6 @@ name = "rustkit"
 path = "src/main.rs"
 
 [dependencies]
+rustkit-compiler = { path = "../rustkit-compiler" }
 serde_json = "1"
 libc = "0.2"
